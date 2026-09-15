@@ -15,7 +15,7 @@ Manage Alta Labs routers through the Alta cloud, so the portal always shows what
 terraform {
   required_providers {
     alta = {
-      source = "twilightcoders/alta-labs"
+      source = "twilightcoders/alta"
     }
   }
 }

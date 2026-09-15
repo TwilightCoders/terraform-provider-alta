@@ -7,8 +7,8 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/txn"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
 )
 
 // CloudReader reads the cloud objects a router's configuration is compiled from.

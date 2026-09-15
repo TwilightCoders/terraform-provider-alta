@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud/cognito"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/httpx"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cognito"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/httpx"
 )
 
 // DefaultBaseURL is Alta Labs' production management API.

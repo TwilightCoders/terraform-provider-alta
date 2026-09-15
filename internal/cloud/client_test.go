@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud/cognito"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cognito"
 )
 
 var now = time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)

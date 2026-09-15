@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 // listCodec maps identified items to a JSON array of objects.

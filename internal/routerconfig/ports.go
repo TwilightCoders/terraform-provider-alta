@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 // SwitchPort is the VLAN membership of one physical port (device.portsCfg.ports).

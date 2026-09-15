@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/device"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/device"
 )
 
 var errBoom = errors.New("boom")

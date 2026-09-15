@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 // Document is a working copy of the cloud objects one router's configuration lives in.

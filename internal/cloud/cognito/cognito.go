@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/httpx"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/httpx"
 )
 
 // Alta Labs' production user pool, as used by manage.alta.inc.

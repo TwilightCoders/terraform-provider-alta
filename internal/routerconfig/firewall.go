@@ -1,6 +1,6 @@
 package routerconfig
 
-import "github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+import "github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 
 // Endpoint is an address/port pair, used for rule sources, destinations and NAT
 // translations. Ports may be single ("443") or ranges ("50000-50100").

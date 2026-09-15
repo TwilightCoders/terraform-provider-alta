@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 // VLAN is a site network (site.vlans). The cloud compiles it into a bridge, a firewall

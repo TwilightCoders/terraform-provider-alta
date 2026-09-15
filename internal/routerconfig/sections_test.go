@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 func TestPutPortKeepsEquivalentRepresentation(t *testing.T) {

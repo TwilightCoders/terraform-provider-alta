@@ -1,4 +1,4 @@
-module github.com/TwilightCoders/terraform-provider-alta-labs
+module github.com/TwilightCoders/terraform-provider-alta
 
 go 1.27.0
 

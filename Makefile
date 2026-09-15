@@ -2,14 +2,14 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := help
 
-BINARY   := terraform-provider-alta-labs
+BINARY   := terraform-provider-alta
 GOOS     := $(shell go env GOOS)
 GOARCH   := $(shell go env GOARCH)
 VERSION  ?= $(or $(patsubst v%,%,$(shell git describe --tags --abbrev=0 2>/dev/null)),0.0.0)
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 TOOL     := go tool -modfile=tools/go.mod
 
-PLUGIN_DIR := $(HOME)/.terraform.d/plugins/registry.terraform.io/twilightcoders/alta-labs/$(VERSION)/$(GOOS)_$(GOARCH)
+PLUGIN_DIR := $(HOME)/.terraform.d/plugins/registry.terraform.io/twilightcoders/alta/$(VERSION)/$(GOOS)_$(GOARCH)
 
 TIMEOUT ?= 30m
 RUN     ?= .
@@ -29,7 +29,7 @@ install: build ## Install into the local Terraform plugin mirror
 .PHONY: dev-override
 dev-override: build ## Print a ~/.terraformrc dev_overrides block for this checkout
 	@printf 'provider_installation {\n  dev_overrides {\n    "%s" = "%s"\n  }\n  direct {}\n}\n' \
-		'registry.terraform.io/twilightcoders/alta-labs' '$(CURDIR)/bin'
+		'registry.terraform.io/twilightcoders/alta' '$(CURDIR)/bin'
 	@echo "# Add the block above to ~/.terraformrc yourself; this target never writes it." >&2
 
 .PHONY: clean

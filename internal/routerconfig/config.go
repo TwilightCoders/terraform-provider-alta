@@ -1,6 +1,6 @@
 package routerconfig
 
-import "github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+import "github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 
 // Config is a router's configuration, section by section.
 //

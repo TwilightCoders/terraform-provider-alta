@@ -24,4 +24,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/TwilightCoders/terraform-provider-alta-labs
+        - github.com/TwilightCoders/terraform-provider-alta

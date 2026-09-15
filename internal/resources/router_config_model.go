@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/routerconfig"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 )
 
 // routerConfigModel is the Terraform state of alta_router_config. Each section is a

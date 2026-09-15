@@ -7,8 +7,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud/cloudtest"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
 )
 
 func fixtureDocument(t *testing.T, site cloud.Object, state cloud.State) *Document {

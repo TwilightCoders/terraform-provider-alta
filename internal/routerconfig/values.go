@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 // The put* helpers overlay one desired field onto a cloud object. A field whose current

@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     alta = {
-      source = "twilightcoders/alta-labs"
+      source = "twilightcoders/alta"
     }
   }
 }

@@ -54,7 +54,7 @@ import should show no changes. Full reference: [docs/index.md](docs/index.md) an
 Everything runs through `make`. Run `make help` for the full list.
 
 ```bash
-make build        # bin/terraform-provider-alta-labs
+make build        # bin/terraform-provider-alta
 make test         # unit tests
 make lint         # golangci-lint (pinned in tools/go.mod)
 make docs         # regenerate docs/ with tfplugindocs

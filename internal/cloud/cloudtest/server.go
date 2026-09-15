@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud/cognito"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cognito"
 )
 
 // Fixture ids of the recorded Example site and its router.

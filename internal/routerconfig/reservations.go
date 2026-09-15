@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 )
 
 // DHCPReservation pins a client to an address. The cloud stores it on the client record

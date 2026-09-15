@@ -12,10 +12,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud/cloudtest"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/resources"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/txn"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
 )
 
 // fakeTransactor applies changes straight to the cloud, standing in for the router gate.

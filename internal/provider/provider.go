@@ -16,14 +16,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/device"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/resources"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/txn"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/device"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
 )
 
 // Address is the registry address Terraform uses to locate this provider.
-const Address = "registry.terraform.io/twilightcoders/alta-labs"
+const Address = "registry.terraform.io/twilightcoders/alta"
 
 // Environment variables read when the corresponding attribute is not set.
 const (

@@ -1,4 +1,4 @@
-// Command terraform-provider-alta-labs serves the Alta Labs Terraform provider.
+// Command terraform-provider-alta serves the Alta Labs Terraform provider.
 package main
 
 import (
@@ -8,7 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/provider"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/provider"
 )
 
 // version is set by the linker at release time.

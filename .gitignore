@@ -1,7 +1,7 @@
 # Build output
 /bin/
 /dist/
-terraform-provider-alta-labs
+terraform-provider-alta
 
 # Test and coverage output
 coverage.out

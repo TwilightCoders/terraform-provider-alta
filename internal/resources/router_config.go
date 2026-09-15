@@ -11,9 +11,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/routerconfig"
-	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/txn"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
 )
 
 var (
