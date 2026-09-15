@@ -3,7 +3,9 @@
 Manage Alta Labs routers (Route10 and family) with Terraform, **through the Alta cloud**,
 so the portal always shows what Terraform applied.
 
-> **Status: pre-alpha.** Under active construction. No resources are available yet.
+> **Status: pre-alpha.** `alta_router_config` is implemented and tested against recorded
+> fixtures and read-only against a live Route10. It has not yet applied a change to a
+> real router.
 
 Design: [docs/DESIGN.md](docs/DESIGN.md). In short:
 
@@ -14,6 +16,30 @@ Design: [docs/DESIGN.md](docs/DESIGN.md). In short:
   itself back unless health probes pass and the provider confirms.
 - SSH to the router is used to gate, verify and roll back, and for the few device
   extensions the portal has no concept of.
+
+## Usage
+
+```terraform
+provider "alta" {
+  read_only = true # import and plan with a guarantee of no writes
+
+  ssh = {
+    host                 = "192.0.2.1"
+    host_key_fingerprint = "SHA256:…" # ssh-keyscan <host> | ssh-keygen -lf -
+  }
+}
+
+resource "alta_router_config" "router" {
+  site_id   = "…"
+  device_id = "…"
+  # port_forwards, firewall_rules, vlans, static_routes, switch_ports, dhcp_reservations
+}
+```
+
+Credentials come from `ALTA_LABS_EMAIL` and `ALTA_LABS_PASSWORD`. Import an existing router
+with `terraform import alta_router_config.router <site_id>/<device_id>`; a plan straight after
+import should show no changes. Full reference: [docs/index.md](docs/index.md) and
+[docs/resources/router_config.md](docs/resources/router_config.md).
 
 ## Requirements
 
