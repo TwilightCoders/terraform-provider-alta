@@ -41,9 +41,11 @@ func newRouter(t *testing.T, window, pushTimeout time.Duration, agentStart strin
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
 	stubs := map[string]string{
-		"md5sum":   `md5 -q "$1" 2>/dev/null || command md5sum "$1"; true`,
 		"ping":     `case "$*" in *198.51.100.99*) echo "100% packet loss"; exit 1;; esac`,
 		"nslookup": `case "$1" in *good*) printf 'Server: x\nAddress 1: 1.2.3.4\n';; *) echo "No answer";; esac`,
+	}
+	if _, err := exec.LookPath("md5sum"); err != nil {
+		stubs["md5sum"] = `md5 -r "$1"` // macOS: same "<hash> <file>" shape as md5sum
 	}
 	must(t, os.MkdirAll(bin, 0o755))
 	for name, body := range stubs {
@@ -103,7 +105,7 @@ func must(t *testing.T, err error) {
 }
 
 // pushAgent resumes the agent and, like the cloud, pushes a new config a moment later.
-const pushAgent = `touch "$ROOT/agent"; (sleep 1; printf pushed > "$ROOT/config.json"; md5 -q "$ROOT/config.json" > "$ROOT/hash.txt" 2>/dev/null || md5sum "$ROOT/config.json" | cut -d' ' -f1 > "$ROOT/hash.txt") &`
+const pushAgent = `touch "$ROOT/agent"; (sleep 1; printf pushed > "$ROOT/config.json"; md5sum "$ROOT/config.json" | cut -d' ' -f1 > "$ROOT/hash.txt") &`
 
 const quietAgent = `touch "$ROOT/agent"`
 
