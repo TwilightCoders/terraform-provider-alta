@@ -1,6 +1,6 @@
 D={{q .Dir}}
 state=clean
-[ -f "$D/state" ] && read -r state < "$D/state"
+[ -f "$D/state" ] && read -r state _ < "$D/state"
 printf 'config_md5=%s\n' "$(md5sum {{q .ConfigFile}} | cut -d' ' -f1)"
 printf 'applied_hash=%s\n' "$(cat {{q .HashFile}})"
 printf 'state=%s\n' "$state"

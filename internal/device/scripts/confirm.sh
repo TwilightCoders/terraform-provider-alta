@@ -1,6 +1,6 @@
 set -eu
 D={{q .Dir}}
-read -r state < "$D/state"
+read -r state _ < "$D/state"
 if [ "$state" != committed ]; then echo "cannot confirm from state $state" >&2; exit 3; fi
 echo confirmed > "$D/state"
 i=0

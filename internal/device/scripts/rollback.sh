@@ -1,7 +1,7 @@
 #!/bin/sh
 D={{q .Dir}}
 state=
-read -r state < "$D/state" 2>/dev/null || exit 0
+read -r state _ < "$D/state" 2>/dev/null || exit 0
 [ "$state" = committed ] || exit 0
 echo rolled-back > "$D/state"
 {{.Log}} "rollback: restoring the pre-transaction configuration"

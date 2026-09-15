@@ -272,3 +272,12 @@ func waitTimerIdle(t *testing.T, r *router) {
 		time.Sleep(200 * time.Millisecond)
 	}
 }
+
+func TestStatusReadsOnlyTheStateWord(t *testing.T) {
+	r := newRouter(t, time.Minute, time.Second, quietAgent)
+	must(t, os.MkdirAll(r.path("tf"), 0o755))
+	must(t, os.WriteFile(r.path("tf/state"), []byte("confirmed 1789423421 t2\n"), 0o644))
+	if s := r.status(); s.State != StateConfirmed || !s.State.Settled() {
+		t.Fatalf("state = %q", s.State)
+	}
+}

@@ -1,6 +1,6 @@
 set -eu
 D={{q .Dir}}
-read -r state < "$D/state"
+read -r state _ < "$D/state"
 if [ "$state" != gated ]; then echo "cannot commit from state $state" >&2; exit 3; fi
 old=$(cat {{q .HashFile}})
 echo committed > "$D/state"
@@ -8,7 +8,7 @@ echo committed > "$D/state"
   echo $$ > "$1/timer.pid"
   i=0
   while [ "$i" -lt "$2" ]; do
-    read -r s < "$1/state"
+    read -r s _ < "$1/state"
     if [ "$s" != committed ]; then rm -f "$1/timer.pid"; exit 0; fi
     sleep 1
     i=$((i + 1))
