@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - gocritic
+    - misspell
+    - nilnil
+    - revive
+    - unparam
+    - usestdlibvars
+  settings:
+    revive:
+      rules:
+        # Framework interface methods (Metadata, Schema, Create, ...) are documented by the interface.
+        - name: exported
+          disabled: true
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/TwilightCoders/terraform-provider-alta-labs

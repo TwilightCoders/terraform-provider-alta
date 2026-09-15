@@ -1,0 +1,20 @@
+# Build output
+/bin/
+/dist/
+terraform-provider-alta-labs
+
+# Test and coverage output
+coverage.out
+coverage.html
+
+# Terraform working files from examples and manual testing
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Local environment
+.env
+.worktrees/
+.DS_Store
