@@ -54,7 +54,7 @@ var portForwards = listCodec[PortForward]{
 		putString(o, "id", f.ID)
 		putString(o, "type", "destination")
 		putString(o, "description", f.Description)
-		putStrings(o, "protocol", f.Protocols)
+		putStringSet(o, "protocol", f.Protocols)
 		putString(o, "ipVersion", f.IPVersion)
 		putString(o, "zoneIn", f.ZoneIn)
 		putString(o, "zoneOut", f.ZoneOut)
@@ -80,8 +80,9 @@ type FirewallRule struct {
 }
 
 var firewallRules = listCodec[FirewallRule]{
-	path: []string{"firewall", "firewall", "rules"},
-	id:   func(r FirewallRule) string { return r.ID },
+	path:    []string{"firewall", "firewall", "rules"},
+	ordered: true,
+	id:      func(r FirewallRule) string { return r.ID },
 	decode: func(o cloud.Object) FirewallRule {
 		return FirewallRule{
 			ID:          asString(o["id"]),
@@ -101,9 +102,9 @@ var firewallRules = listCodec[FirewallRule]{
 		putString(o, "id", r.ID)
 		putString(o, "description", r.Description)
 		putString(o, "action", r.Action)
-		putStrings(o, "protocol", r.Protocols)
+		putStringSet(o, "protocol", r.Protocols)
 		putString(o, "ipVersion", r.IPVersion)
-		putStrings(o, "icmpType", r.ICMPTypes)
+		putStringSet(o, "icmpType", r.ICMPTypes)
 		putString(o, "zoneIn", r.ZoneIn)
 		putString(o, "zoneOut", r.ZoneOut)
 		encodeEndpoint(o, "source", r.Source)

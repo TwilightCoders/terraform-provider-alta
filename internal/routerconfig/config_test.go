@@ -3,9 +3,11 @@ package routerconfig
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
@@ -88,7 +90,7 @@ func TestPlanReproducesPhase0(t *testing.T) {
 	for _, w := range writes {
 		setWrite(applied, w)
 	}
-	if got := Read(applied); !reflect.DeepEqual(got, desired) {
+	if got := canonical(Read(applied)); !reflect.DeepEqual(got, canonical(desired)) {
 		t.Errorf("configuration after writes differs from desired\n got %+v\nwant %+v", got, desired)
 	}
 
@@ -99,6 +101,18 @@ func TestPlanReproducesPhase0(t *testing.T) {
 	if !reflect.DeepEqual(restored.Site, before.Site) || !reflect.DeepEqual(restored.Device, before.Device) {
 		t.Error("pre-images do not restore the original documents")
 	}
+}
+
+// canonical sorts the sections whose order carries no meaning.
+func canonical(c Config) Config {
+	sortByID(*c.PortForwards, func(f PortForward) string { return f.ID })
+	sortByID(*c.VLANs, func(v VLAN) string { return fmt.Sprintf("%08d", v.ID) })
+	sortByID(*c.StaticRoutes, func(r StaticRoute) string { return r.ID })
+	return c
+}
+
+func sortByID[T any](items []T, id func(T) string) {
+	sort.Slice(items, func(i, j int) bool { return id(items[i]) < id(items[j]) })
 }
 
 // setWrite simulates the cloud accepting a write.
@@ -146,7 +160,7 @@ func TestPreservesFieldsTheModelDoesNotKnow(t *testing.T) {
 	}
 }
 
-func TestListsAreAuthoritativeAndOrdered(t *testing.T) {
+func TestListsAreAuthoritative(t *testing.T) {
 	doc := &Document{Site: cloud.Object{"routes": []any{
 		cloud.Object{"id": "r1", "network": "10.0.0.0/8"},
 		cloud.Object{"id": "r2", "network": "172.16.0.0/12"},
@@ -156,7 +170,7 @@ func TestListsAreAuthoritativeAndOrdered(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := Read(doc).StaticRoutes
-	if len(*got) != 2 || (*got)[0].ID != "r3" || (*got)[1].ID != "r1" {
+	if len(*got) != 2 || (*got)[0].ID != "r1" || (*got)[1].ID != "r3" {
 		t.Fatalf("routes = %+v", *got)
 	}
 }
@@ -180,5 +194,39 @@ func TestEmptyManagedListLeavesAbsentKeyAlone(t *testing.T) {
 	}
 	if doc.Site["routes"] != nil {
 		t.Errorf("routes = %v, want untouched nil", doc.Site["routes"])
+	}
+}
+
+func TestUnorderedSectionsKeepCloudOrder(t *testing.T) {
+	doc := afterPhase0(t)
+	fwd := *Read(doc).PortForwards
+	shuffled := append([]PortForward{fwd[len(fwd)-1]}, fwd[:len(fwd)-1]...)
+	for i := range shuffled {
+		p := shuffled[i].Protocols
+		for l, r := 0, len(p)-1; l < r; l, r = l+1, r-1 {
+			p[l], p[r] = p[r], p[l]
+		}
+	}
+
+	writes, _, err := (Config{PortForwards: &shuffled}).Plan(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writes) != 0 {
+		t.Fatalf("reordering forwards or their protocols must not write: %v", writeKeys(writes))
+	}
+}
+
+func TestOrderedSectionsFollowInput(t *testing.T) {
+	doc := afterPhase0(t)
+	rules := *Read(doc).FirewallRules
+	rules[0], rules[1] = rules[1], rules[0]
+
+	writes, _, err := (Config{FirewallRules: &rules}).Plan(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := writeKeys(writes); !reflect.DeepEqual(got, []string{"site.firewall"}) {
+		t.Fatalf("writes = %v", got)
 	}
 }

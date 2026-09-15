@@ -59,7 +59,7 @@ func writeSwitchPorts(device cloud.Object, desired []SwitchPort) error {
 
 		allowed := child(port, "allowedVlans")
 		putFlag(allowed, "all", sp.AllVLANs)
-		putInts(allowed, "list", sp.TaggedVLANs)
+		putIntSet(allowed, "list", sp.TaggedVLANs)
 		pruneEmpty(port, "allowedVlans")
 	}
 	return nil

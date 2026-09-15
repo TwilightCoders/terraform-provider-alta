@@ -76,12 +76,22 @@ func putStrings(o cloud.Object, key string, want []string) {
 	}
 }
 
-func putInts(o cloud.Object, key string, want []int64) {
+// putStringSet is putStrings for fields whose order carries no meaning: an existing
+// value holding the same members is kept as it is.
+func putStringSet(o cloud.Object, key string, want []string) {
+	if sameMembers(asStrings(o[key]), want) {
+		return
+	}
+	putStrings(o, key, want)
+}
+
+// putIntSet is the integer counterpart of putStringSet.
+func putIntSet(o cloud.Object, key string, want []int64) {
 	if len(want) == 0 {
 		delete(o, key)
 		return
 	}
-	if got, ok := asInts(o[key]); !ok || !equalInts(got, want) {
+	if got, ok := asInts(o[key]); !ok || !sameMembers(got, want) {
 		values := make([]any, len(want))
 		for i, n := range want {
 			values[i] = json.Number(strconv.FormatInt(n, 10))
@@ -189,14 +199,19 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-func equalInts(a, b []int64) bool {
+func sameMembers[T comparable](a, b []T) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i] != b[i] {
+	count := make(map[T]int, len(a))
+	for _, v := range a {
+		count[v]++
+	}
+	for _, v := range b {
+		if count[v] == 0 {
 			return false
 		}
+		count[v]--
 	}
 	return true
 }

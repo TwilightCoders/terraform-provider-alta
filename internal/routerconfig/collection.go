@@ -7,15 +7,17 @@ import (
 	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
 )
 
-// listCodec maps an ordered list of identified items to a JSON array of objects.
+// listCodec maps identified items to a JSON array of objects.
 //
-// Writes are authoritative: the array becomes exactly the given items, in order. An
-// item whose id already exists is overlaid onto that element, so fields the codec does
-// not model are kept.
+// Writes are authoritative: the array holds exactly the given items. An item whose id
+// already exists is overlaid onto that element, so fields the codec does not model are
+// kept. When ordered, the array takes the given order; otherwise existing elements keep
+// their position and new ones are appended, so reordering the input changes nothing.
 type listCodec[T any] struct {
 	// path locates the array from the document root, e.g. firewall → nat → rules.
-	path []string
-	id   func(T) string
+	path    []string
+	ordered bool
+	id      func(T) string
 	// decode reads an item from an element.
 	decode func(cloud.Object) T
 	// encode overlays an item onto an element (fresh or existing).
@@ -32,28 +34,36 @@ func (c listCodec[T]) read(root cloud.Object) []T {
 }
 
 func (c listCodec[T]) write(root cloud.Object, items []T) error {
-	existing := map[string]cloud.Object{}
-	for _, e := range c.elements(root) {
+	current := c.elements(root)
+	existing := make(map[string]cloud.Object, len(current))
+	for _, e := range current {
 		existing[asString(e["id"])] = e
 	}
 
-	seen := map[string]bool{}
-	next := make([]any, 0, len(items))
+	byID := make(map[string]T, len(items))
+	order := make([]string, 0, len(items))
 	for _, item := range items {
 		id := c.id(item)
 		if id == "" {
 			return fmt.Errorf("%s: every item needs an id", c.name())
 		}
-		if seen[id] {
+		if _, dup := byID[id]; dup {
 			return fmt.Errorf("%s: duplicate id %q", c.name(), id)
 		}
-		seen[id] = true
+		byID[id] = item
+		order = append(order, id)
+	}
+	if !c.ordered {
+		order = stableOrder(current, order)
+	}
 
+	next := make([]any, 0, len(order))
+	for _, id := range order {
 		element, ok := existing[id]
 		if !ok {
 			element = cloud.Object{}
 		}
-		c.encode(item, element)
+		c.encode(byID[id], element)
 		next = append(next, element)
 	}
 
@@ -86,6 +96,29 @@ func (c listCodec[T]) elements(root cloud.Object) []cloud.Object {
 		}
 	}
 	return out
+}
+
+// stableOrder keeps wanted ids that already exist in their current position and appends
+// the rest in the order given.
+func stableOrder(current []cloud.Object, wanted []string) []string {
+	want := make(map[string]bool, len(wanted))
+	for _, id := range wanted {
+		want[id] = true
+	}
+	order := make([]string, 0, len(wanted))
+	placed := map[string]bool{}
+	for _, e := range current {
+		if id := asString(e["id"]); want[id] {
+			order = append(order, id)
+			placed[id] = true
+		}
+	}
+	for _, id := range wanted {
+		if !placed[id] {
+			order = append(order, id)
+		}
+	}
+	return order
 }
 
 func (c listCodec[T]) name() string {
