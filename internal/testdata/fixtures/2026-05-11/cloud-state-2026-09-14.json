@@ -1,0 +1,95 @@
+{
+  "clients": [
+    {
+      "config": {
+        "ip": "192.0.2.20"
+      },
+      "id": "020000000018",
+      "wired": true
+    },
+    {
+      "config": {
+        "ip": "198.51.100.20"
+      },
+      "id": "020000000019",
+      "wired": true
+    },
+    {
+      "config": {
+        "ip": "192.0.2.10",
+        "vlan": 2
+      },
+      "id": "02000000001b",
+      "wired": true
+    },
+    {
+      "config": {
+        "vlan": 2
+      },
+      "id": "02000000001c",
+      "wired": true
+    }
+  ],
+  "devices": [
+    {
+      "id": "0a1b2c3d4e5f",
+      "portsCfg": {
+        "ports": {
+          "0": {
+            "allowedVlans": {
+              "all": true
+            },
+            "mode": "",
+            "vlan": 2
+          },
+          "1": {
+            "mode": "wan",
+            "name": "ONT",
+            "poe": "on",
+            "wan": "default1"
+          },
+          "2": {
+            "allowedVlans": {
+              "list": [
+                1,
+                2
+              ]
+            }
+          },
+          "3": {
+            "allowedVlans": {
+              "list": [
+                2
+              ]
+            },
+            "eee": "off"
+          },
+          "4": {
+            "allowedVlans": {
+              "list": [
+                2
+              ]
+            },
+            "eee": "off",
+            "speed": "auto",
+            "vlan": 2
+          },
+          "5": {
+            "allowedVlans": {
+              "list": [
+                2,
+                20
+              ]
+            },
+            "eee": "off",
+            "mode": "",
+            "name": "NAS",
+            "speed": "auto",
+            "vlan": 2,
+            "wan": "default1"
+          }
+        }
+      }
+    }
+  ]
+}

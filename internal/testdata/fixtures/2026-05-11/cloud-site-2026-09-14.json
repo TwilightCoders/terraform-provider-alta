@@ -1,0 +1,292 @@
+{
+  "firewall": {
+    "firewall": {
+      "rules": [
+        {
+          "action": "ACCEPT",
+          "description": "Allow DHCP renewals",
+          "destination": {
+            "port": 68
+          },
+          "id": "Y2K7Wf",
+          "ipVersion": "ipv4",
+          "protocol": [
+            "udp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "Allow Ping",
+          "icmpType": [
+            "echo-request"
+          ],
+          "id": "6JF5w3",
+          "ipVersion": "ipv4",
+          "protocol": [
+            "icmp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "Allow IGMP",
+          "id": "kVK53Q",
+          "ipVersion": "ipv4",
+          "protocol": [
+            "igmp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "Allow DHCPv6",
+          "destination": {
+            "address": "fe80::/10",
+            "port": 546
+          },
+          "id": "gWI4cW",
+          "ipVersion": "ipv6",
+          "protocol": [
+            "udp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "Allow MLD",
+          "icmpType": [
+            "130/0",
+            "131/0",
+            "132/0",
+            "143/0"
+          ],
+          "id": "e6csKz",
+          "ipVersion": "ipv6",
+          "protocol": [
+            "icmp"
+          ],
+          "source": {
+            "address": "fe80::/10"
+          },
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "Allow ICMPv6 input",
+          "icmpType": [
+            "echo-request",
+            "echo-reply",
+            "destination-unreachable",
+            "packet-too-big",
+            "time-exceeded",
+            "bad-header",
+            "unknown-header-type",
+            "router-solicitation",
+            "neighbour-solicitation",
+            "router-advertisement",
+            "neighbour-advertisement"
+          ],
+          "id": "7bPdDP",
+          "ipVersion": "ipv6",
+          "limit": "1000/sec",
+          "protocol": [
+            "icmp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "Allow ICMPv6 forward",
+          "icmpType": [
+            "echo-request",
+            "echo-reply",
+            "destination-unreachable",
+            "packet-too-big",
+            "time-exceeded",
+            "bad-header",
+            "unknown-header-type"
+          ],
+          "id": "XS0X3X",
+          "ipVersion": "ipv6",
+          "limit": "1000/sec",
+          "protocol": [
+            "icmp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "IPsec IKE",
+          "destination": {
+            "port": 500
+          },
+          "id": "6iSnHM",
+          "protocol": [
+            "udp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "IPsec NAT-T",
+          "destination": {
+            "port": 4500
+          },
+          "id": "i9ow1N",
+          "protocol": [
+            "udp"
+          ],
+          "zoneIn": "wan"
+        },
+        {
+          "action": "ACCEPT",
+          "description": "IPsec ESP",
+          "id": "-ahxbr",
+          "protocol": [
+            "esp"
+          ],
+          "zoneIn": "wan"
+        }
+      ]
+    },
+    "nat": {
+      "rules": [
+        {
+          "description": "Game server",
+          "destination": {
+            "port": 7000
+          },
+          "id": "cYzVVn",
+          "protocol": [
+            "udp",
+            "tcp"
+          ],
+          "translation": {
+            "address": "192.0.2.10",
+            "port": "7000"
+          },
+          "type": "destination",
+          "zoneIn": "wan",
+          "zoneOut": "lan"
+        },
+        {
+          "description": "Media server",
+          "destination": {
+            "port": 9000
+          },
+          "id": "W9PlTq",
+          "ipVersion": "any",
+          "protocol": [
+            "udp",
+            "tcp"
+          ],
+          "translation": {
+            "address": "192.0.2.10",
+            "port": "9000"
+          },
+          "type": "destination",
+          "zoneIn": "wan",
+          "zoneOut": "lan"
+        },
+        {
+          "description": "HTTP proxy",
+          "destination": {
+            "port": 80
+          },
+          "id": "LR0Hi6",
+          "protocol": [
+            "udp",
+            "tcp"
+          ],
+          "translation": {
+            "address": "192.0.2.10",
+            "port": "80"
+          },
+          "type": "destination",
+          "zoneIn": "wan"
+        },
+        {
+          "description": "HTTPS proxy",
+          "destination": {
+            "port": 443
+          },
+          "id": "lhX53l",
+          "protocol": [
+            "udp",
+            "tcp"
+          ],
+          "translation": {
+            "address": "192.0.2.10",
+            "port": "443"
+          },
+          "type": "destination",
+          "zoneIn": "wan"
+        },
+        {
+          "description": "Voice chat",
+          "destination": {
+            "port": "8088"
+          },
+          "id": "PycDPi",
+          "ipVersion": "ipv4",
+          "protocol": [
+            "tcp",
+            "udp"
+          ],
+          "translation": {
+            "address": "192.0.2.10",
+            "port": "8088"
+          },
+          "type": "destination",
+          "zoneIn": "wan",
+          "zoneOut": "lan"
+        },
+        {
+          "description": "Voice media",
+          "destination": {
+            "port": "7070"
+          },
+          "id": "gH8vjF",
+          "ipVersion": "ipv4",
+          "protocol": [
+            "udp"
+          ],
+          "translation": {
+            "address": "192.0.2.10",
+            "port": "7070"
+          },
+          "type": "destination",
+          "zoneIn": "wan",
+          "zoneOut": "lan"
+        }
+      ]
+    }
+  },
+  "id": "aBcDeFgHiJkLmNoPqRsTu",
+  "routes": null,
+  "vlans": [
+    {
+      "id": 1,
+      "isolation": true,
+      "notes": "Guest"
+    },
+    {
+      "dnsServers": "192.0.2.10,1.1.1.1,8.8.8.8",
+      "domainName": "lan",
+      "id": 2,
+      "notes": "Home",
+      "poolSize": 243,
+      "reservedIPs": 10,
+      "routerIP": "192.0.2.1/24"
+    },
+    {
+      "disableDHCP": true,
+      "id": 20,
+      "mdns": false,
+      "notes": "Isolated",
+      "poolSize": 243,
+      "routerIP": "198.18.20.1/24"
+    }
+  ]
+}
