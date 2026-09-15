@@ -1,44 +1,19 @@
 package routerconfig
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta-labs/internal/cloud/cloudtest"
 )
 
-const (
-	fixtureSite   = "aBcDeFgHiJkLmNoPqRsTu"
-	fixtureRouter = "0a1b2c3d4e5f"
-)
-
-func loadJSON(t *testing.T, path string, out any) {
+func fixtureDocument(t *testing.T, site cloud.Object, state cloud.State) *Document {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "testdata", "fixtures", path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	if err := dec.Decode(out); err != nil {
-		t.Fatalf("%s: %v", path, err)
-	}
-}
-
-// fixtureDocument loads the cloud objects captured in a fixture directory.
-func fixtureDocument(t *testing.T, dir, siteFile, stateFile string) *Document {
-	t.Helper()
-	var site cloud.Object
-	var state cloud.State
-	loadJSON(t, filepath.Join(dir, siteFile), &site)
-	loadJSON(t, filepath.Join(dir, stateFile), &state)
-	doc, err := NewDocument(fixtureSite, fixtureRouter, site, state)
+	doc, err := NewDocument(cloudtest.SiteID, cloudtest.DeviceID, site, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,11 +21,13 @@ func fixtureDocument(t *testing.T, dir, siteFile, stateFile string) *Document {
 }
 
 func beforePhase0(t *testing.T) *Document {
-	return fixtureDocument(t, "2026-05-11", "cloud-site-2026-09-14.json", "cloud-state-2026-09-14.json")
+	site, state := cloudtest.Fixture(t, "2026-05-11", "cloud-site-2026-09-14.json", "cloud-state-2026-09-14.json")
+	return fixtureDocument(t, site, state)
 }
 
 func afterPhase0(t *testing.T) *Document {
-	return fixtureDocument(t, "2026-09-14", "cloud-site.json", "cloud-state.json")
+	site, state := cloudtest.Current(t)
+	return fixtureDocument(t, site, state)
 }
 
 func writeKeys(writes []cloud.Write) []string {
@@ -81,7 +58,7 @@ func TestPlanReproducesPhase0(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"site.firewall", "site.vlans", "device.portsCfg" + fixtureRouter}
+	want := []string{"site.firewall", "site.vlans", "device.portsCfg" + cloudtest.DeviceID}
 	if got := writeKeys(writes); !reflect.DeepEqual(got, want) {
 		t.Fatalf("writes = %v, want %v", got, want)
 	}
