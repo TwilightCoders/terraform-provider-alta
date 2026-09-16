@@ -40,7 +40,8 @@ type SSHConfig struct {
 // SSHRunner dials a fresh connection per script. The router restarts networking on
 // every config push, so long-lived connections are exactly what not to trust.
 type SSHRunner struct {
-	cfg SSHConfig
+	cfg  SSHConfig
+	gate *dialGate
 }
 
 // NewSSHRunner validates cfg and returns a runner.
@@ -63,20 +64,25 @@ func NewSSHRunner(cfg SSHConfig) (*SSHRunner, error) {
 	if cfg.DialTimeout == 0 {
 		cfg.DialTimeout = 10 * time.Second
 	}
-	return &SSHRunner{cfg: cfg}, nil
+	return &SSHRunner{cfg: cfg, gate: newDialGate(1)}, nil
 }
 
 // Run executes script via the remote shell and returns stdout.
 func (r *SSHRunner) Run(ctx context.Context, script string, stdin []byte) ([]byte, error) {
+	return r.gate.do(ctx, func() ([]byte, error) { return r.run(ctx, script, stdin) })
+}
+
+func (r *SSHRunner) run(ctx context.Context, script string, stdin []byte) ([]byte, error) {
 	client, err := r.dial(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &DialError{Err: err}
 	}
 	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("ssh: opening session: %w", err)
+		// The connection came up and then went away before the script could start.
+		return nil, &DialError{Err: fmt.Errorf("ssh: opening session: %w", err)}
 	}
 	defer func() { _ = session.Close() }()
 
@@ -97,6 +103,14 @@ func (r *SSHRunner) Run(ctx context.Context, script string, stdin []byte) ([]byt
 		return stdout.Bytes(), nil
 	}
 }
+
+// DialError is a connection that never carried a script. The router's SSH server resets
+// connections that arrive together, so these are worth retrying; a script that ran is not.
+type DialError struct{ Err error }
+
+func (e *DialError) Error() string { return e.Err.Error() }
+
+func (e *DialError) Unwrap() error { return e.Err }
 
 // ScriptError is a script that ran but failed.
 type ScriptError struct {

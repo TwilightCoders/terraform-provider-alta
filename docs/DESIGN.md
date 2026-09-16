@@ -45,8 +45,9 @@ the portal's own requests.
 There is no version field: the last writer wins on a whole key.
 
 **SSH to the router** (secondary). Used only to gate, verify and roll back pushes, and for
-device extensions the portal cannot express. The host key is pinned. No local HTTP
-configuration API exists on the router.
+device extensions the portal cannot express. The host key is pinned, a fresh connection is
+dialled per script, and connections are serialised (see §6). No local HTTP configuration
+API exists on the router.
 
 ## 3. Mapping configuration to cloud objects
 
@@ -110,6 +111,17 @@ third-party VPN scripts). These belong in small, idempotent hooks that ride exte
 points the router already has — `post-cfg.sh`, OpenWrt hotplug — rather than periodic
 reconcile loops. Most reversions on these routers trace to state kept in `/etc`, which is
 lost at every reboot; deterministic replay at boot and push removes the need for loops.
+
+The provider owns one loader file on the router, which reinstalls hooks after a boot or
+push; `post-cfg.sh` sources it in one line. That split decides how each half is reported:
+the loader is the provider's, so a missing one is drift and appears in the plan, while
+`post-cfg.sh` belongs to whoever manages it, so a missing source line is reported and left
+alone.
+
+Connections to the router are serialised. Its SSH server resets handshakes that arrive
+together, which Terraform's default parallelism produces as soon as a plan refreshes
+several resources, so the provider dials one at a time and retries a refused connection —
+only ever one that never carried a script.
 
 ## 7. The observed API description
 
