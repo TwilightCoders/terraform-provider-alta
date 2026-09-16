@@ -3,9 +3,15 @@
 Manage Alta Labs routers (Route10 and family) with Terraform, **through the Alta cloud**,
 so the portal always shows what Terraform applied.
 
-> **Status: pre-alpha.** `alta_router_config` is implemented and tested against recorded
-> fixtures and read-only against a live Route10. It has not yet applied a change to a
-> real router.
+> **Status: pre-1.0.** The resources below are implemented and tested against recorded
+> fixtures, and changes have been applied to a live Route10 through the gated transaction.
+> The schema is still moving: expect breaking changes between minor versions until 1.0.
+
+> **Unofficial.** This project is not affiliated with, endorsed by, or supported by Alta
+> Labs. Alta publishes no API description, so this provider is built on an interface that
+> was observed rather than documented, and Alta may change it without notice. What was
+> observed, and how, is recorded in [`api/schema.json`](api/schema.json) and re-checked by
+> the test suite rather than trusted.
 
 Design: [docs/DESIGN.md](docs/DESIGN.md). In short:
 
@@ -20,8 +26,19 @@ Design: [docs/DESIGN.md](docs/DESIGN.md). In short:
 ## Usage
 
 ```terraform
+terraform {
+  required_providers {
+    alta = {
+      source = "twilightcoders/alta"
+    }
+  }
+}
+
 provider "alta" {
-  read_only = true # import and plan with a guarantee of no writes
+  # Named once here rather than on every resource. Both default to $ALTA_LABS_SITE_ID
+  # and $ALTA_LABS_DEVICE_ID.
+  site_id   = "…"
+  device_id = "…"
 
   ssh = {
     host                 = "192.0.2.1"
@@ -29,10 +46,21 @@ provider "alta" {
   }
 }
 
-resource "alta_router_config" "router" {
-  site_id   = "…"
-  device_id = "…"
-  # port_forwards, firewall_rules, vlans, static_routes, switch_ports, dhcp_reservations
+# A network is described once; what follows from it is derived rather than repeated.
+resource "alta_vlan" "lab" {
+  vlan_id   = 40
+  name      = "Lab"
+  router_ip = "198.18.40.1/24"
+}
+
+resource "alta_dhcp_reservation" "printer" {
+  mac = "02:00:00:aa:bb:cc"
+  ip  = cidrhost(alta_vlan.lab.subnet, 40)
+}
+
+resource "alta_switch_port" "uplink" {
+  port         = 4
+  tagged_vlans = [alta_vlan.lab.vlan_id]
 }
 
 # For the few behaviours the cloud has no concept of. Both touch the router only,
@@ -50,10 +78,24 @@ resource "alta_device_hook" "example" {
 }
 ```
 
-Credentials come from `ALTA_LABS_EMAIL` and `ALTA_LABS_PASSWORD`. Import an existing router
-with `terraform import alta_router_config.router <site_id>/<device_id>`; a plan straight after
-import should show no changes. Full reference: [docs/index.md](docs/index.md) and
-[docs/resources/router_config.md](docs/resources/router_config.md).
+Credentials come from `ALTA_LABS_EMAIL` and `ALTA_LABS_PASSWORD`.
+
+| Resource | What it owns |
+|---|---|
+| `alta_vlan` | one network, and the subnet, bridge and interface name derived from it |
+| `alta_static_route` | one route |
+| `alta_port_forward` | one destination NAT rule |
+| `alta_firewall_rule` | one filter rule |
+| `alta_dhcp_reservation` | one client's fixed address |
+| `alta_switch_port` | the VLAN membership of one physical port |
+| `alta_router_config` | every section at once, for managing a router wholesale |
+| `alta_device_hook`, `alta_device_file` | the router's own scripts and files |
+| `alta_devices` (data source) | the hardware a site has adopted |
+
+Each resource owns its own object and leaves the rest of its collection alone, so Terraform
+and the portal can manage different things in one site. Import an existing object by its id
+— `terraform import alta_vlan.lab 40` — and a plan straight after should show no changes.
+Full reference: [docs/index.md](docs/index.md).
 
 ## The API description
 
