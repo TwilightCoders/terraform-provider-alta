@@ -41,6 +41,25 @@ with `terraform import alta_router_config.router <site_id>/<device_id>`; a plan 
 import should show no changes. Full reference: [docs/index.md](docs/index.md) and
 [docs/resources/router_config.md](docs/resources/router_config.md).
 
+## The API description
+
+Alta publishes no API schema, so [`api/schema.json`](api/schema.json) records what was
+observed: endpoints extracted from the portal bundle named in its provenance, object
+shapes **fitted from captured responses** rather than asserted, how each collection
+behaves when written, and a compile mapping from cloud fields to what the router ends up
+running — including the places where Alta's own compiler silently drops a field.
+
+It is evidence, not contract, so it is re-checked rather than trusted:
+
+```bash
+make schema            # refit object shapes from the captured fixtures
+make portal-endpoints  # re-extract endpoints from the live portal bundle (read-only)
+go test ./internal/apischema                       # fixtures still conform
+TF_ACC=1 go test ./internal/apischema -run Live    # a real site still conforms (read-only)
+```
+
+Drift in Alta's API then shows up as a failing test instead of a surprise at apply time.
+
 ## Requirements
 
 | Component | Version |

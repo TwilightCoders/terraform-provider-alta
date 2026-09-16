@@ -111,7 +111,26 @@ points the router already has — `post-cfg.sh`, OpenWrt hotplug — rather than
 reconcile loops. Most reversions on these routers trace to state kept in `/etc`, which is
 lost at every reboot; deterministic replay at boot and push removes the need for loops.
 
-## 7. Testing
+## 7. The observed API description
+
+`api/schema.json` is the single record of what the API looks like, kept honest by tests
+rather than by discipline:
+
+- **Provenance** names the portal bundle (by hash) and router firmware it was observed
+  from, so "is this still true?" is answerable.
+- **Object shapes are fitted** from captured responses, never hand-asserted. Objects whose
+  captures are reduced for privacy are augmented rather than narrowed; objects never yet
+  seen are marked, and fitting fails if instances appear.
+- **Collections** record identity, ordering and whether the provider rewrites them wholesale.
+- **The compile mapping** records how each cloud field reaches the device, with dated
+  observations and an explicit status, including `defect` where the cloud stores a value
+  and the compiler ignores it. That mapping is the part that repeatedly costs days when it
+  lives only in someone's memory.
+
+Conformance runs against the fixtures in unit tests and, optionally, against a live site
+read-only, so an API change fails a test instead of an apply.
+
+## 8. Testing
 
 - Cognito SRP is pinned by a test vector shared with an independent implementation.
 - `routerconfig` is tested against anonymised fixtures captured before and after a real

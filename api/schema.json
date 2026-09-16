@@ -1,0 +1,433 @@
+{
+  "provenance": {
+    "captured": "2026-09-15",
+    "router_firmware": "1.5g",
+    "portal_bundle": {
+      "path": "/static/js/main.922bfbea.js",
+      "sha256": "56ef7f2cbb547a5f"
+    },
+    "note": "Alta Labs publishes no API description. Endpoints are extracted from the portal bundle above; object fields are fitted from captured responses by `make schema`; the compile mapping is observed on a router and dated. Treat every entry as evidence, not contract. Captures checked in as fixtures are anonymised and reduced to the fields the tests use; objects marked partial_capture are augmented from live reads rather than narrowed to the fixtures."
+  },
+  "endpoints": [
+    {
+      "name": "site",
+      "method": "GET",
+      "path": "/api/site",
+      "token": "header",
+      "semantics": "Reads the site document: firewall (nat and filter rules), vlans, routes, wans and site-wide settings."
+    },
+    {
+      "name": "site_state",
+      "method": "GET",
+      "path": "/api/site/state",
+      "token": "header",
+      "semantics": "Reads live devices and clients. Device records carry portsCfg and services; client records carry config, including a fixed IP."
+    },
+    {
+      "name": "site_audit",
+      "method": "GET",
+      "path": "/api/site/audit",
+      "token": "header",
+      "semantics": "Reads the change trail, including the portal user behind each change and firmware updates as edit/dev entries."
+    },
+    {
+      "name": "site_edit",
+      "method": "POST",
+      "path": "/api/site",
+      "token": "body",
+      "semantics": "Replaces one top-level site key wholesale, e.g. {id, vlans}. There is no per-field update and no version field: the last writer wins on the key."
+    },
+    {
+      "name": "device_edit",
+      "method": "POST",
+      "path": "/api/device/edit",
+      "token": "body",
+      "semantics": "Replaces one device field wholesale, e.g. {id, portsCfg}."
+    },
+    {
+      "name": "client_edit",
+      "method": "POST",
+      "path": "/api/client/edit",
+      "token": "body",
+      "semantics": "Sets client record fields flat, e.g. {siteid, id, ip, vlan}. Stored back under the record's config object."
+    }
+  ],
+  "objects": {
+    "client_config": {
+      "source": "client:config",
+      "partial_capture": true,
+      "fields": {
+        "icon": {
+          "type": "string",
+          "optional": true
+        },
+        "ip": {
+          "type": "string",
+          "optional": true
+        },
+        "vlan": {
+          "type": "number",
+          "optional": true
+        }
+      }
+    },
+    "firewall_rule": {
+      "source": "site:firewall.firewall.rules[]",
+      "fields": {
+        "action": {
+          "type": "string",
+          "values": [
+            "ACCEPT"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "destination": {
+          "type": "object",
+          "optional": true
+        },
+        "icmpType": {
+          "type": "array\u003cstring\u003e",
+          "optional": true,
+          "values": [
+            "130/0",
+            "131/0",
+            "132/0",
+            "143/0",
+            "bad-header",
+            "destination-unreachable",
+            "echo-reply",
+            "echo-request",
+            "neighbour-advertisement",
+            "neighbour-solicitation",
+            "packet-too-big",
+            "router-advertisement",
+            "router-solicitation",
+            "time-exceeded",
+            "unknown-header-type"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "ipVersion": {
+          "type": "string",
+          "optional": true,
+          "values": [
+            "ipv4",
+            "ipv6"
+          ]
+        },
+        "limit": {
+          "type": "string",
+          "optional": true
+        },
+        "protocol": {
+          "type": "array\u003cstring\u003e",
+          "values": [
+            "esp",
+            "icmp",
+            "igmp",
+            "tcp",
+            "udp"
+          ]
+        },
+        "source": {
+          "type": "object",
+          "optional": true
+        },
+        "zoneIn": {
+          "type": "string"
+        },
+        "zoneOut": {
+          "type": "string",
+          "optional": true
+        }
+      }
+    },
+    "nat_rule": {
+      "source": "site:firewall.nat.rules[]",
+      "fields": {
+        "description": {
+          "type": "string"
+        },
+        "destination": {
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "ipVersion": {
+          "type": "string",
+          "optional": true,
+          "values": [
+            "any",
+            "ipv4"
+          ]
+        },
+        "protocol": {
+          "type": "array\u003cstring\u003e",
+          "values": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "translation": {
+          "type": "object"
+        },
+        "type": {
+          "type": "string",
+          "values": [
+            "destination"
+          ]
+        },
+        "zoneIn": {
+          "type": "string"
+        },
+        "zoneOut": {
+          "type": "string",
+          "optional": true
+        }
+      }
+    },
+    "static_route": {
+      "source": "site:routes[]",
+      "unobserved": true,
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "interface": {
+          "type": "string",
+          "optional": true
+        },
+        "metric": {
+          "type": "number",
+          "optional": true
+        },
+        "name": {
+          "type": "string",
+          "optional": true
+        },
+        "network": {
+          "type": "string"
+        },
+        "nextHop": {
+          "type": "string",
+          "optional": true
+        },
+        "type": {
+          "type": "string",
+          "values": [
+            "blackhole",
+            "interface",
+            "next-hop"
+          ]
+        }
+      }
+    },
+    "switch_port": {
+      "source": "device:portsCfg.ports{}",
+      "fields": {
+        "allowedVlans": {
+          "type": "object",
+          "optional": true
+        },
+        "eee": {
+          "type": "string",
+          "optional": true,
+          "values": [
+            "off"
+          ]
+        },
+        "mode": {
+          "type": "string",
+          "optional": true,
+          "values": [
+            "",
+            "wan"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "optional": true
+        },
+        "poe": {
+          "type": "string",
+          "optional": true
+        },
+        "speed": {
+          "type": "string",
+          "optional": true,
+          "values": [
+            "auto"
+          ]
+        },
+        "vlan": {
+          "type": "number",
+          "optional": true
+        },
+        "wan": {
+          "type": "string",
+          "optional": true
+        }
+      }
+    },
+    "vlan": {
+      "source": "site:vlans[]",
+      "fields": {
+        "disableDHCP": {
+          "type": "bool",
+          "optional": true
+        },
+        "dnsServers": {
+          "type": "string",
+          "optional": true
+        },
+        "domainName": {
+          "type": "string",
+          "optional": true
+        },
+        "id": {
+          "type": "number"
+        },
+        "isolation": {
+          "type": "bool",
+          "optional": true
+        },
+        "mdns": {
+          "type": "bool",
+          "optional": true
+        },
+        "notes": {
+          "type": "string"
+        },
+        "poolSize": {
+          "type": "number",
+          "optional": true
+        },
+        "reservedIPs": {
+          "type": "number",
+          "optional": true
+        },
+        "routerIP": {
+          "type": "string",
+          "optional": true
+        }
+      }
+    }
+  },
+  "collections": [
+    {
+      "name": "port_forwards",
+      "object": "nat_rule",
+      "key": "id",
+      "ordered": false,
+      "authoritative": true,
+      "cloud_path": "site.firewall.nat.rules[]"
+    },
+    {
+      "name": "firewall_rules",
+      "object": "firewall_rule",
+      "key": "id",
+      "ordered": true,
+      "authoritative": true,
+      "cloud_path": "site.firewall.firewall.rules[]"
+    },
+    {
+      "name": "vlans",
+      "object": "vlan",
+      "key": "id",
+      "ordered": false,
+      "authoritative": true,
+      "cloud_path": "site.vlans[]"
+    },
+    {
+      "name": "static_routes",
+      "object": "static_route",
+      "key": "id",
+      "ordered": false,
+      "authoritative": true,
+      "cloud_path": "site.routes[]"
+    },
+    {
+      "name": "switch_ports",
+      "object": "switch_port",
+      "ordered": false,
+      "authoritative": false,
+      "cloud_path": "device.portsCfg.ports{}"
+    },
+    {
+      "name": "dhcp_reservations",
+      "object": "client_config",
+      "ordered": false,
+      "authoritative": true,
+      "cloud_path": "clients[].config.ip"
+    }
+  ],
+  "compile": [
+    {
+      "cloud": "site.firewall.nat.rules[]",
+      "device": "nat.rules[] then firewall.@redirect",
+      "status": "ok",
+      "note": "Passes through with ids and fields intact. Ports are accepted as number or string and kept as written.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "site.firewall.firewall.rules[]",
+      "device": "firewall.rules[] then firewall.@rule",
+      "status": "ok",
+      "note": "zoneOut is honoured, which the router's own documentation left unclear.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "site.vlans[]",
+      "device": "interfaces[] bridge, services.dhcpServers[], firewall zone member, services.dnsForwarder.listenInterfaces",
+      "status": "ok",
+      "note": "Creating a VLAN also binds its bridge for DNS, so no local fix-up is needed for that.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "site.vlans[].dnsServers",
+      "device": "services.dhcpServers[].dnsServers",
+      "status": "ok",
+      "note": "Comma-joined string in the cloud, list on the device. This is the only input for the untagged LAN's DHCP DNS as well.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "device.services.dhcpServers[].dnsServers",
+      "device": "(nothing)",
+      "status": "defect",
+      "note": "Stored by the cloud and echoed back, but ignored by the compiler for the untagged LAN; the VLAN entry wins. Writing it looks successful and changes nothing.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "device.jumboFrames",
+      "device": "interfaces[].mtu",
+      "status": "defect",
+      "note": "Applied to bridges and most interface entries, but the trailing per-port entries emitted for ports carrying eee or speed overrides get no mtu key, and the last entry wins. Those ports fall back to 1500 on every push.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "device.portsCfg.ports{}",
+      "device": "bridge members and VLAN subinterfaces",
+      "status": "ok",
+      "note": "A port with allowedVlans.all tags every VLAN, including ones added later.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "clients[].config.ip",
+      "device": "services.dhcpServers[].staticMappings[]",
+      "status": "ok",
+      "note": "The matching VLAN is chosen by subnet. config.vlan is a separate client VLAN assignment, not part of the reservation.",
+      "observed": "2026-09-14"
+    },
+    {
+      "cloud": "site.routes[]",
+      "device": "staticRoutes then network.@route",
+      "status": "unverified",
+      "note": "The field vocabulary matches the device generator and the portal's own route form (type, network, nextHop, interface, metric), but no route has been pushed and observed end to end yet, so static_route is marked unobserved."
+    }
+  ]
+}

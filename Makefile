@@ -60,6 +60,17 @@ lint: ## Run golangci-lint
 fmt: ## Format code
 	$(TOOL) golangci-lint fmt ./...
 
+##@ API description
+
+.PHONY: schema
+schema: ## Refit api/schema.json object shapes from the captured fixtures
+	go test ./internal/apischema -run TestFitMatchesFixtures -update
+	@echo "Review the diff: it is a claim about what Alta's API returns."
+
+.PHONY: portal-endpoints
+portal-endpoints: ## Re-extract the endpoint list from the live portal bundle (read-only)
+	scripts/portal-endpoints.sh
+
 ##@ Documentation
 
 .PHONY: docs
