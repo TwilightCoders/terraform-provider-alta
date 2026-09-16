@@ -130,10 +130,11 @@ func (m routerConfigModel) toConfig() (routerconfig.Config, error) {
 		return c, err
 	}
 	if c.StaticRoutes, err = convertMap(m.StaticRoutes, func(id string, r staticRouteModel) (routerconfig.StaticRoute, error) {
-		return routerconfig.StaticRoute{
+		route := routerconfig.StaticRoute{
 			ID: id, Name: r.Name.ValueString(), Type: r.Type.ValueString(), Network: r.Network.ValueString(),
 			NextHop: r.NextHop.ValueString(), Interface: r.Interface.ValueString(), Metric: r.Metric.ValueInt64Pointer(),
-		}, nil
+		}
+		return route, route.Validate()
 	}); err != nil {
 		return c, err
 	}

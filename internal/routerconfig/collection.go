@@ -2,6 +2,7 @@ package routerconfig
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
@@ -22,6 +23,10 @@ type listCodec[T any] struct {
 	decode func(cloud.Object) T
 	// encode overlays an item onto an element (fresh or existing).
 	encode func(T, cloud.Object)
+	// sort, when set, writes the array in this order rather than keeping current
+	// positions. Use it where the portal itself rewrites the whole array in a fixed
+	// order, so an edit here and an edit in the UI do not reshuffle each other.
+	sort func(a, b T) int
 }
 
 func (c listCodec[T]) read(root cloud.Object) []T {
@@ -53,7 +58,15 @@ func (c listCodec[T]) write(root cloud.Object, items []T) error {
 		byID[id] = item
 		order = append(order, id)
 	}
-	if !c.ordered {
+	switch {
+	case c.sort != nil:
+		sorted := slices.Clone(items)
+		slices.SortStableFunc(sorted, c.sort)
+		order = order[:0]
+		for _, item := range sorted {
+			order = append(order, c.id(item))
+		}
+	case !c.ordered:
 		order = stableOrder(current, order)
 	}
 

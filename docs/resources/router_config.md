@@ -172,6 +172,7 @@ Optional:
 
 Required:
 
+- `name` (String) Name shown in the portal. The portal refuses to save a route without one.
 - `network` (String) Destination CIDR.
 - `type` (String) `next-hop`, `interface` or `blackhole`.
 
@@ -179,7 +180,6 @@ Optional:
 
 - `interface` (String) Outgoing interface.
 - `metric` (Number) Route metric.
-- `name` (String) Name shown in the portal.
 - `next_hop` (String) Gateway, for `next-hop` routes.
 
 

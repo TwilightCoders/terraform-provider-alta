@@ -1,6 +1,8 @@
 package routerconfig
 
 import (
+	"cmp"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -63,6 +65,13 @@ var vlans = listCodec[VLAN]{
 	},
 }
 
+// Route types, as the portal writes them.
+const (
+	RouteNextHop   = "next-hop"
+	RouteInterface = "interface"
+	RouteBlackhole = "blackhole"
+)
+
 // StaticRoute is a site route (site.routes). Type is next-hop, interface or blackhole.
 type StaticRoute struct {
 	ID        string
@@ -74,9 +83,31 @@ type StaticRoute struct {
 	Metric    *int64
 }
 
+// Validate applies the rules the portal's own route form enforces before it will save,
+// so a route the UI would refuse fails at plan rather than at push.
+func (r StaticRoute) Validate() error {
+	switch {
+	case r.Name == "":
+		return fmt.Errorf("route %s: a name is required", r.ID)
+	case r.Type == RouteNextHop && r.NextHop == "":
+		return fmt.Errorf("route %s: a next-hop route needs next_hop", r.ID)
+	case r.Type == RouteInterface && r.Interface == "":
+		return fmt.Errorf("route %s: an interface route needs interface", r.ID)
+	}
+	return nil
+}
+
 var staticRoutes = listCodec[StaticRoute]{
 	path: []string{"routes"},
 	id:   func(r StaticRoute) string { return r.ID },
+	// The portal sorts by metric, then destination, and rewrites the whole array on
+	// every save of any one route.
+	sort: func(a, b StaticRoute) int {
+		if d := cmp.Compare(metricOf(a), metricOf(b)); d != 0 {
+			return d
+		}
+		return strings.Compare(a.Network, b.Network)
+	},
 	decode: func(o cloud.Object) StaticRoute {
 		return StaticRoute{
 			ID:        asString(o["id"]),
@@ -97,4 +128,12 @@ var staticRoutes = listCodec[StaticRoute]{
 		putString(o, "interface", r.Interface)
 		putInt(o, "metric", r.Metric)
 	},
+}
+
+// metricOf reads a route's metric the way the portal's sort does: absent counts as zero.
+func metricOf(r StaticRoute) int64 {
+	if r.Metric == nil {
+		return 0
+	}
+	return *r.Metric
 }

@@ -132,7 +132,7 @@ func routerConfigSchema() schema.Schema {
 				Optional:            true,
 				MarkdownDescription: "Static routes, keyed by Alta route id.",
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"name":      optionalString("Name shown in the portal."),
+					"name":      requiredString("Name shown in the portal. The portal refuses to save a route without one."),
 					"type":      requiredString("`next-hop`, `interface` or `blackhole`.", stringvalidator.OneOf("next-hop", "interface", "blackhole")),
 					"network":   requiredString("Destination CIDR."),
 					"next_hop":  optionalString("Gateway, for `next-hop` routes."),

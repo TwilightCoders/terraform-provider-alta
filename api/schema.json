@@ -427,7 +427,7 @@
       "cloud": "site.routes[]",
       "device": "staticRoutes then network.@route",
       "status": "unverified",
-      "note": "The field vocabulary matches the device generator and the portal's own route form (type, network, nextHop, interface, metric), but no route has been pushed and observed end to end yet, so static_route is marked unobserved."
+      "note": "The cloud vocabulary is confirmed from the portal's own save path, which builds {id, name, type, network, nextHop, interface, metric}, drops empty fields, sends metric as a number, generates the id client-side as a 6-character nanoid, and rewrites the whole array sorted by metric then destination. The device generator reads staticRoutes and emits network.@route target/gateway/interface/type/metric/table/mtu. No route has been pushed and observed end to end yet, so static_route stays unobserved."
     }
   ]
 }

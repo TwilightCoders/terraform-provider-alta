@@ -262,3 +262,32 @@ func (h *harness) expectTransactions(n int, keys ...string) resource.TestCheckFu
 		return nil
 	}
 }
+
+// TestStaticRouteIsCheckedAtPlan keeps a route the portal would refuse from reaching a
+// push: a next-hop route without a gateway compiles to nothing on the router, so the
+// failure belongs in the plan rather than in a transaction that has already stopped the
+// cloud agent.
+func TestStaticRouteIsCheckedAtPlan(t *testing.T) {
+	h := newHarness(t)
+	site, device := cloudtest.SiteID, cloudtest.DeviceID
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: h.factories(),
+		Steps: []resource.TestStep{{
+			Config: providerBlock(false) + fmt.Sprintf(`
+resource "alta_router_config" "route10" {
+  site_id   = %q
+  device_id = %q
+
+  static_routes = {
+    vpnret = {
+      name    = "Return path"
+      type    = "next-hop"
+      network = "198.18.20.0/28"
+    }
+  }
+}
+`, site, device),
+			ExpectError: regexp.MustCompile(`needs next_hop`),
+		}},
+	})
+}

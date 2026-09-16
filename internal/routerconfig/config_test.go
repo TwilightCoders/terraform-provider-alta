@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
@@ -205,5 +206,51 @@ func TestOrderedSectionsFollowInput(t *testing.T) {
 	}
 	if got := writeKeys(writes); !reflect.DeepEqual(got, []string{"site.firewall"}) {
 		t.Fatalf("writes = %v", got)
+	}
+}
+
+// TestStaticRoutesAreWrittenInPortalOrder keeps Terraform and the portal from reshuffling
+// each other: the portal sorts routes by metric, then destination, and rewrites the whole
+// array whenever any one route is saved.
+func TestStaticRoutesAreWrittenInPortalOrder(t *testing.T) {
+	metric := func(n int64) *int64 { return &n }
+	doc := &Document{Site: cloud.Object{}}
+	routes := []StaticRoute{
+		{ID: "c", Name: "c", Type: RouteBlackhole, Network: "198.18.30.0/24", Metric: metric(50)},
+		{ID: "a", Name: "a", Type: RouteBlackhole, Network: "198.18.20.0/24"},
+		{ID: "b", Name: "b", Type: RouteBlackhole, Network: "198.18.10.0/24", Metric: metric(50)},
+	}
+	if err := (Config{StaticRoutes: &routes}).Apply(doc); err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []string
+	for _, e := range doc.Site["routes"].([]any) {
+		ids = append(ids, asString(e.(cloud.Object)["id"]))
+	}
+	if want := []string{"a", "b", "c"}; !equalStrings(ids, want) {
+		t.Errorf("order = %v, want %v (metric, then destination)", ids, want)
+	}
+}
+
+func TestStaticRouteValidationMatchesThePortalForm(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		route StaticRoute
+		want  string
+	}{
+		{"nameless", StaticRoute{ID: "r1", Type: RouteBlackhole, Network: "198.18.0.0/24"}, "a name is required"},
+		{"next-hop without a gateway", StaticRoute{ID: "r1", Name: "r", Type: RouteNextHop, Network: "198.18.0.0/24"}, "needs next_hop"},
+		{"interface route without one", StaticRoute{ID: "r1", Name: "r", Type: RouteInterface, Network: "198.18.0.0/24"}, "needs interface"},
+		{"blackhole needs neither", StaticRoute{ID: "r1", Name: "r", Type: RouteBlackhole, Network: "198.18.0.0/24"}, ""},
+		{"next-hop with a gateway", StaticRoute{ID: "r1", Name: "r", Type: RouteNextHop, Network: "198.18.0.0/24", NextHop: "198.18.0.1"}, ""},
+	} {
+		err := tc.route.Validate()
+		switch {
+		case tc.want == "" && err != nil:
+			t.Errorf("%s: %v", tc.name, err)
+		case tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+			t.Errorf("%s: err = %v, want %q", tc.name, err, tc.want)
+		}
 	}
 }
