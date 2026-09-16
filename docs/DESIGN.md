@@ -130,6 +130,12 @@ rather than by discipline:
 Conformance runs against the fixtures in unit tests and, optionally, against a live site
 read-only, so an API change fails a test instead of an apply.
 
+One observation point is not enough. A field the cloud stores, echoes back and never
+delivers looks correct from the API alone; only the configuration the router is running
+disproves it. The compile checks therefore read that configuration and verify each rule
+still behaves as recorded — including reporting a defect that has since been fixed, so a
+workaround is dropped rather than carried indefinitely.
+
 ## 8. Testing
 
 - Cognito SRP is pinned by a test vector shared with an independent implementation.

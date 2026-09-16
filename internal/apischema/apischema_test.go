@@ -125,13 +125,9 @@ func TestConformDetectsDrift(t *testing.T) {
 	}
 }
 
-// TestLiveSiteConforms checks a real site against the schema. It only reads.
-func TestLiveSiteConforms(t *testing.T) {
-	siteID := os.Getenv("ALTA_LABS_SITE_ID")
-	deviceID := os.Getenv("ALTA_LABS_DEVICE_ID")
-	if os.Getenv("TF_ACC") == "" || siteID == "" || deviceID == "" {
-		t.Skip("set TF_ACC=1, ALTA_LABS_SITE_ID and ALTA_LABS_DEVICE_ID (plus credentials) to run")
-	}
+// liveCapture reads a real site. It only reads.
+func liveCapture(t *testing.T, siteID, deviceID string) Capture {
+	t.Helper()
 	client := cloud.NewClient(cloud.Config{Email: os.Getenv("ALTA_LABS_EMAIL"), Password: os.Getenv("ALTA_LABS_PASSWORD")})
 	ctx := context.Background()
 	site, err := client.Site(ctx, siteID)
@@ -146,7 +142,16 @@ func TestLiveSiteConforms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, err := range load(t).Conform(live) {
+	return live
+}
+
+// TestLiveSiteConforms checks a real site against the schema. It only reads.
+func TestLiveSiteConforms(t *testing.T) {
+	siteID, deviceID := os.Getenv("ALTA_LABS_SITE_ID"), os.Getenv("ALTA_LABS_DEVICE_ID")
+	if os.Getenv("TF_ACC") == "" || siteID == "" || deviceID == "" {
+		t.Skip("set TF_ACC=1, ALTA_LABS_SITE_ID and ALTA_LABS_DEVICE_ID (plus credentials) to run")
+	}
+	for _, err := range load(t).Conform(liveCapture(t, siteID, deviceID)) {
 		t.Error(err)
 	}
 }

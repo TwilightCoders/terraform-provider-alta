@@ -55,10 +55,16 @@ It is evidence, not contract, so it is re-checked rather than trusted:
 make schema            # refit object shapes from the captured fixtures
 make portal-endpoints  # re-extract endpoints from the live portal bundle (read-only)
 go test ./internal/apischema                       # fixtures still conform
-TF_ACC=1 go test ./internal/apischema -run Live    # a real site still conforms (read-only)
+TF_ACC=1 go test ./internal/apischema -run Live    # a real site and router still agree (read-only)
 ```
 
 Drift in Alta's API then shows up as a failing test instead of a surprise at apply time.
+
+The live checks use two observation points, because one is not enough: the cloud's own
+read-back cannot show whether a value it stores ever reaches a router. So the compile
+mapping is checked against the configuration the router is actually running, which also
+reports a recorded defect that has been **fixed** — a prompt to drop the workaround rather
+than carry it forever.
 
 ## Requirements
 
