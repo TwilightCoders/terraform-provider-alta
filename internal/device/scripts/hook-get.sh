@@ -8,5 +8,8 @@ if grep -qF {{q .SourceLine}} {{q .PostCfg}} 2>/dev/null; then echo sourced=1; e
 {{if .Hook.Interface}}
 if [ -r {{q .HotplugDir}}/{{.Hook.FileName}} ]; then echo installed=1; else echo installed=0; fi
 {{end}}
+if [ -r {{q .HookDir}}/run/{{.Hook.FileName}} ]; then
+  printf 'last_run=%s\n' "$(cat {{q .HookDir}}/run/{{.Hook.FileName}})"
+fi
 echo '--script--'
 cat "$target"

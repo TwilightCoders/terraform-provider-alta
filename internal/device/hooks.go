@@ -52,14 +52,18 @@ func (h Hook) normalise() Hook {
 	return h
 }
 
-// body wraps the script so a hotplug hook only acts on its own event.
-func (h Hook) body() string {
+// body wraps the script so a hotplug hook only acts on its own event. dir is where the
+// hook records that it ran.
+func (h Hook) body(dir string) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n# Managed by terraform-provider-alta. Edits here are overwritten.\n")
 	if h.Interface != "" {
 		fmt.Fprintf(&b, "[ \"$ACTION\" = %s ] || exit 0\n[ \"$INTERFACE\" = %s ] || exit 0\n",
 			shellQuote(h.normalise().Action), shellQuote(h.Interface))
 	}
+	// Record that the hook reached its body, so "is it installed" and "does it run" are
+	// separate questions. One line, overwritten, on the only filesystem that survives a push.
+	fmt.Fprintf(&b, "date > %s/run/%s\n", dir, h.FileName())
 	b.WriteString(strings.TrimRight(h.Script, "\n"))
 	b.WriteString("\n")
 	return b.String()
@@ -90,8 +94,11 @@ type HookState struct {
 	Sourced bool
 	// Installed reports whether a hotplug hook is in place for the current boot.
 	Installed bool
-	SHA256    string
-	Script    string
+	// LastRun is when the hook last reached its own body, which is a different question
+	// from whether it is installed.
+	LastRun string
+	SHA256  string
+	Script  string
 }
 
 // Extensions manages hooks on one router.
@@ -115,7 +122,7 @@ func (e *Extensions) Put(ctx context.Context, h Hook) (HookState, error) {
 		return HookState{}, err
 	}
 	h = h.normalise()
-	out, err := e.run.Run(ctx, render("hook-put.sh", e.data(h)), []byte(h.body()))
+	out, err := e.run.Run(ctx, render("hook-put.sh", e.data(h)), []byte(h.body(e.layout.HookDir)))
 	if err != nil {
 		return HookState{}, fmt.Errorf("installing hook %q: %w", h.Name, err)
 	}
@@ -126,7 +133,7 @@ func (e *Extensions) Put(ctx context.Context, h Hook) (HookState, error) {
 		Sourced:       fields["sourced"] == "1",
 		Installed:     h.Interface != "",
 		SHA256:        fields["sha256"],
-		Script:        h.body(),
+		Script:        h.body(e.layout.HookDir),
 	}, nil
 }
 
@@ -144,6 +151,7 @@ func (e *Extensions) Get(ctx context.Context, h Hook) (HookState, error) {
 		LoaderPresent: fields["loader"] == "1",
 		Sourced:       fields["sourced"] == "1",
 		Installed:     fields["installed"] == "1",
+		LastRun:       fields["last_run"],
 		SHA256:        fields["sha256"],
 		Script:        script,
 	}, nil

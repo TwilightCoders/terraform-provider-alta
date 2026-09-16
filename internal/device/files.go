@@ -119,13 +119,18 @@ func (e *Extensions) loaderScript() string {
 	return fmt.Sprintf(`#!/bin/sh
 # Managed by terraform-provider-alta. Edits here are overwritten.
 # Runs from post-cfg.sh after every boot and configuration push.
+# Output goes to a file rather than the log: this router runs no syslog buffer, so
+# anything sent to logger is discarded. One run's worth is kept.
+mkdir -p %s/run
+exec >%s/run/loader.log 2>&1
+echo "loader ran $(date)"
 for f in %s/hotplug/*; do
   [ -r "$f" ] || continue
-  { cp "$f" %s/ && chmod 755 %s/"$(basename "$f")"; } 2>&1 | logger -t alta-hooks
+  cp "$f" %s/ && chmod 755 %s/"$(basename "$f")"
 done
 for f in %s/boot/*.sh; do
   [ -r "$f" ] || continue
-  sh "$f" 2>&1 | logger -t alta-hooks
+  sh "$f"
 done
-`, e.layout.HookDir, e.layout.HotplugDir, e.layout.HotplugDir, e.layout.HookDir)
+`, e.layout.HookDir, e.layout.HookDir, e.layout.HookDir, e.layout.HotplugDir, e.layout.HotplugDir, e.layout.HookDir)
 }

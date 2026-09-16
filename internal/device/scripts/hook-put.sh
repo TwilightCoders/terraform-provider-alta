@@ -6,7 +6,7 @@ for cmd in cp chmod mkdir sha256sum logger{{range .Hook.Requires}} {{q .}}{{end}
 done
 H={{q .HookDir}}
 name={{q .Hook.Name}}
-mkdir -p "$H/hotplug" "$H/boot"
+mkdir -p "$H/hotplug" "$H/boot" "$H/run"
 {{if .Hook.Interface}}target="$H/hotplug/{{.Hook.FileName}}"{{else}}target="$H/boot/{{.Hook.FileName}}"{{end}}
 cat > "$target.tmp"
 chmod 755 "$target.tmp"

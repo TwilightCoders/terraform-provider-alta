@@ -177,8 +177,22 @@ func TestHookGetReportsWhatTheRouterHolds(t *testing.T) {
 	if !got.Present || !got.Installed || got.SHA256 != put.SHA256 {
 		t.Fatalf("state = %+v, want the hook as written (%s)", got, put.SHA256)
 	}
-	if strings.TrimSpace(got.Script) != strings.TrimSpace(hook.body()) {
+	if strings.TrimSpace(got.Script) != strings.TrimSpace(hook.body(r.ext.layout.HookDir)) {
 		t.Errorf("script = %q", got.Script)
+	}
+}
+
+// TestHookRecordsThatItRan separates "the hook is installed" from "the hook runs", which
+// an intact firewall chain cannot answer while post-cfg.sh asserts the same rule.
+func TestHookRecordsThatItRan(t *testing.T) {
+	r := newHookRouter(t)
+	hook := resolverHook
+	hook.Script, hook.Run = "true\n", true
+	_, err := r.ext.Put(context.Background(), hook)
+	must(t, err)
+
+	if ran := r.read(filepath.Join("tf.d", "run", hook.FileName())); ran == "" {
+		t.Error("the hook left no record of running")
 	}
 }
 

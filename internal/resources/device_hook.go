@@ -45,6 +45,7 @@ type deviceHookModel struct {
 	Path          types.String `tfsdk:"path"`
 	SHA256        types.String `tfsdk:"sha256"`
 	Loader        types.Bool   `tfsdk:"loader_installed"`
+	LastRun       types.String `tfsdk:"last_run"`
 }
 
 func (m deviceHookModel) hook() device.Hook {
@@ -122,6 +123,12 @@ func (r *DeviceHook) Schema(_ context.Context, _ resource.SchemaRequest, resp *r
 			"sha256": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Checksum of the installed script, so drift on the router is visible.",
+			},
+			"last_run": schema.StringAttribute{
+				Computed: true,
+				MarkdownDescription: "When the hook last reached its own body, as the router reported it. Empty until " +
+					"it has run. Whether a hook is installed and whether it runs are different questions, and this " +
+					"answers the second one.",
 			},
 			"loader_installed": schema.BoolAttribute{
 				Computed: true,
@@ -210,6 +217,7 @@ func (r *DeviceHook) Read(ctx context.Context, req resource.ReadRequest, resp *r
 				"configuration push. Add this line to post-cfg.sh:\n\n    "+r.data.Hooks.SourceLine())
 	}
 	state.Loader = types.BoolValue(got.LoaderPresent)
+	state.LastRun = types.StringValue(got.LastRun)
 	state.SHA256 = types.StringValue(got.SHA256)
 	state.Path = types.StringValue(state.hook().FileName())
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -252,5 +260,6 @@ func (r *DeviceHook) put(ctx context.Context, plan deviceHookModel, state stateS
 	plan.SHA256 = types.StringValue(got.SHA256)
 	plan.Path = types.StringValue(plan.hook().FileName())
 	plan.Loader = types.BoolValue(got.LoaderPresent)
+	plan.LastRun = types.StringValue(got.LastRun)
 	diags.Append(state.Set(ctx, plan)...)
 }
