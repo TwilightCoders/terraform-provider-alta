@@ -16,7 +16,7 @@ Generate it once:
 gpg --full-generate-key
 # (1) RSA and RSA, 4096 bits, an expiry you will actually renew (2y is reasonable)
 # Real name: TwilightCoders
-# Email:     dale@twilightcoders.net
+# Email:     an address the organisation controls
 
 gpg --list-secret-keys --keyid-format=long   # note the fingerprint
 ```
