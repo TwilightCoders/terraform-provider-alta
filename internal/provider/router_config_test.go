@@ -15,6 +15,7 @@ import (
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
 )
 
@@ -61,6 +62,29 @@ func (h *harness) factories() map[string]func() (tfprotov6.ProviderServer, error
 			return data, nil
 		}}),
 	}
+}
+
+// routes reads the site's routes back out of the fake cloud, so a test can assert what a
+// single-item resource did to the array it shares with everything else.
+func (h *harness) routes() ([]routerconfig.StaticRoute, error) {
+	state, err := h.api.Client().State(context.Background(), cloudtest.SiteID)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := routerconfig.NewDocument(cloudtest.SiteID, cloudtest.DeviceID, h.api.Site(), state)
+	if err != nil {
+		return nil, err
+	}
+	return *routerconfig.Read(doc).StaticRoutes, nil
+}
+
+// seedRoute puts a route in the cloud that Terraform does not manage.
+func (h *harness) seedRoute(id, network string) {
+	site := h.api.Site()
+	routes, _ := site["routes"].([]any)
+	site["routes"] = append(routes, cloud.Object{
+		"id": id, "name": id, "type": "blackhole", "network": network,
+	})
 }
 
 func providerBlock(readOnly bool) string {

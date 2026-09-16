@@ -4,6 +4,7 @@ package resources
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 
@@ -41,6 +42,11 @@ type DeviceHooks interface {
 
 // ProviderData is what the provider hands to resources.
 type ProviderData struct {
+	// applying serialises read-modify-write of the shared site document. The API replaces
+	// a whole key at a time, so two resources applying at once would each write back an
+	// array missing the other's change.
+	applying sync.Mutex
+
 	Cloud CloudReader
 	// Transactions is nil when the provider has no router connection; reads still work.
 	Transactions Transactor

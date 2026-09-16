@@ -253,7 +253,12 @@ func Build(s Settings) (*resources.ProviderData, error) {
 }
 
 func (p *Provider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{resources.NewRouterConfig, resources.NewDeviceHook, resources.NewDeviceFile}
+	return []func() resource.Resource{
+		resources.NewRouterConfig,
+		resources.NewStaticRoute,
+		resources.NewDeviceHook,
+		resources.NewDeviceFile,
+	}
 }
 
 func (p *Provider) DataSources(_ context.Context) []func() datasource.DataSource {

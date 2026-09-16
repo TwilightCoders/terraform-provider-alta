@@ -38,6 +38,19 @@ func endpointAttribute(description string) schema.SingleNestedAttribute {
 	}
 }
 
+// staticRouteAttributes describes one route, for both alta_static_route and the
+// static_routes section of alta_router_config.
+func staticRouteAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"name":      requiredString("Name shown in the portal. The portal refuses to save a route without one."),
+		"type":      requiredString("`next-hop`, `interface` or `blackhole`.", stringvalidator.OneOf("next-hop", "interface", "blackhole")),
+		"network":   requiredString("Destination CIDR."),
+		"next_hop":  optionalString("Gateway, for `next-hop` routes."),
+		"interface": optionalString("Outgoing interface."),
+		"metric":    schema.Int64Attribute{Optional: true, MarkdownDescription: "Route metric."},
+	}
+}
+
 func routerConfigSchema() schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "The configuration of one Alta router, written through the Alta cloud so the portal shows it.\n\n" +
@@ -131,14 +144,7 @@ func routerConfigSchema() schema.Schema {
 			"static_routes": schema.MapNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "Static routes, keyed by Alta route id.",
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"name":      requiredString("Name shown in the portal. The portal refuses to save a route without one."),
-					"type":      requiredString("`next-hop`, `interface` or `blackhole`.", stringvalidator.OneOf("next-hop", "interface", "blackhole")),
-					"network":   requiredString("Destination CIDR."),
-					"next_hop":  optionalString("Gateway, for `next-hop` routes."),
-					"interface": optionalString("Outgoing interface."),
-					"metric":    schema.Int64Attribute{Optional: true, MarkdownDescription: "Route metric."},
-				}},
+				NestedObject:        schema.NestedAttributeObject{Attributes: staticRouteAttributes()},
 			},
 			"switch_ports": schema.MapNestedAttribute{
 				Optional: true,

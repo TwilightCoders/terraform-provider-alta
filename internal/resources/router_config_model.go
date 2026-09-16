@@ -76,6 +76,22 @@ type staticRouteModel struct {
 	Metric    types.Int64  `tfsdk:"metric"`
 }
 
+// route converts the model to a domain route with the given id. Both the whole-router
+// resource and alta_static_route go through here, so the mapping lives in one place.
+func (m staticRouteModel) route(id string) routerconfig.StaticRoute {
+	return routerconfig.StaticRoute{
+		ID: id, Name: m.Name.ValueString(), Type: m.Type.ValueString(), Network: m.Network.ValueString(),
+		NextHop: m.NextHop.ValueString(), Interface: m.Interface.ValueString(), Metric: m.Metric.ValueInt64Pointer(),
+	}
+}
+
+func staticRouteModelOf(r routerconfig.StaticRoute) staticRouteModel {
+	return staticRouteModel{
+		Name: optional(r.Name), Type: optional(r.Type), Network: optional(r.Network),
+		NextHop: optional(r.NextHop), Interface: optional(r.Interface), Metric: types.Int64PointerValue(r.Metric),
+	}
+}
+
 type switchPortModel struct {
 	NativeVLAN  types.Int64 `tfsdk:"native_vlan"`
 	AllVLANs    types.Bool  `tfsdk:"all_vlans"`
@@ -130,10 +146,7 @@ func (m routerConfigModel) toConfig() (routerconfig.Config, error) {
 		return c, err
 	}
 	if c.StaticRoutes, err = convertMap(m.StaticRoutes, func(id string, r staticRouteModel) (routerconfig.StaticRoute, error) {
-		route := routerconfig.StaticRoute{
-			ID: id, Name: r.Name.ValueString(), Type: r.Type.ValueString(), Network: r.Network.ValueString(),
-			NextHop: r.NextHop.ValueString(), Interface: r.Interface.ValueString(), Metric: r.Metric.ValueInt64Pointer(),
-		}
+		route := r.route(id)
 		return route, route.Validate()
 	}); err != nil {
 		return c, err
@@ -195,10 +208,7 @@ func (m routerConfigModel) withConfig(c routerconfig.Config) routerConfigModel {
 	}
 	if m.StaticRoutes != nil {
 		m.StaticRoutes = toMap(*c.StaticRoutes, func(r routerconfig.StaticRoute) (string, staticRouteModel) {
-			return r.ID, staticRouteModel{
-				Name: optional(r.Name), Type: optional(r.Type), Network: optional(r.Network),
-				NextHop: optional(r.NextHop), Interface: optional(r.Interface), Metric: types.Int64PointerValue(r.Metric),
-			}
+			return r.ID, staticRouteModelOf(r)
 		})
 	}
 	if m.SwitchPorts != nil {
