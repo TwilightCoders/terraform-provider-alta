@@ -59,6 +59,10 @@ type vlanResourceModel struct {
 	DHCP        types.Bool   `tfsdk:"dhcp"`
 	Isolation   types.Bool   `tfsdk:"isolation"`
 	MDNS        types.Bool   `tfsdk:"mdns"`
+	Network     types.String `tfsdk:"network"`
+	Interface   types.String `tfsdk:"interface"`
+	Gateway     types.String `tfsdk:"gateway"`
+	Subnet      types.String `tfsdk:"subnet"`
 }
 
 func (m vlanResourceModel) siteRef() types.String { return m.SiteID }
@@ -82,6 +86,14 @@ func (m vlanResourceModel) withVLAN(v routerconfig.VLAN) vlanResourceModel {
 	m.DNSServers, m.DomainName = nonEmpty(v.DNSServers), optional(v.DomainName)
 	m.DHCP, m.Isolation = types.BoolValue(v.DHCP), types.BoolValue(v.Isolation)
 	m.MDNS = types.BoolPointerValue(v.MDNS)
+	return m.derived(v)
+}
+
+// derived fills the names that follow from the network itself, so a configuration states
+// each of them once and everything downstream refers to it.
+func (m vlanResourceModel) derived(v routerconfig.VLAN) vlanResourceModel {
+	m.Network, m.Interface = types.StringValue(v.NetworkName()), types.StringValue(v.Interface())
+	m.Gateway, m.Subnet = optional(v.Gateway()), optional(v.Subnet())
 	return m
 }
 
@@ -114,6 +126,16 @@ func vlanIdentityAttributes() map[string]schema.Attribute {
 		Required:            true,
 		MarkdownDescription: "VLAN number. Changing it is a different network, so the old one is removed and the new one created.",
 		PlanModifiers:       []planmodifier.Int64{int64planmodifier.RequiresReplace()},
+	}
+	for name, description := range map[string]string{
+		"network": "The router's own name for this network, as a firewall zone lists it and an " +
+			"interface route names it. Pass it to `alta_static_route.interface` rather than writing it out.",
+		"interface": "The bridge the router puts this network on.",
+		"gateway":   "The router's address on this network, without the prefix.",
+		"subnet": "The network in CIDR form, so hosts on it can be derived in one place: " +
+			"`cidrhost(alta_vlan.home.subnet, 40)`.",
+	} {
+		attributes[name] = schema.StringAttribute{Computed: true, MarkdownDescription: description}
 	}
 	return attributes
 }
@@ -223,9 +245,10 @@ func (r *VLAN) importVLAN(raw string, diags *diag.Diagnostics) (site string, num
 }
 
 func (r *VLAN) write(ctx context.Context, plan vlanResourceModel, state stateSetter, diags *diag.Diagnostics) {
-	if err := r.put(ctx, plan, plan.vlan()); err != nil {
+	vlan := plan.vlan()
+	if err := r.put(ctx, plan, vlan); err != nil {
 		diags.AddError("Writing VLAN", err.Error())
 		return
 	}
-	diags.Append(state.Set(ctx, plan)...)
+	diags.Append(state.Set(ctx, plan.derived(vlan))...)
 }

@@ -211,7 +211,7 @@ func TestFirewallRuleKeepsEvaluationOrder(t *testing.T) {
 func TestFirewallRuleDefaultsToTheProviderSite(t *testing.T) {
 	h := newHarness(t)
 	const name = "alta_firewall_rule.vpn"
-	config := providerBlockWithSite(false) + fmt.Sprintf(`
+	config := providerBlockWithSite() + fmt.Sprintf(`
 resource "alta_firewall_rule" "vpn" {
   id = %q
 

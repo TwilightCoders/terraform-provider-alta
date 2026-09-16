@@ -120,12 +120,12 @@ func sameIDs(read func() ([]string, error), want []string) error {
 
 // providerBlockWithSite names both identities on the provider, so the resources under it
 // need name neither.
-func providerBlockWithSite(readOnly bool) string {
+func providerBlockWithSite() string {
 	return fmt.Sprintf(`
 provider "alta" {
   email     = "test"
   password  = "test"
-  read_only = %t
+  read_only = false
   site_id   = %q
   device_id = %q
   ssh = {
@@ -133,7 +133,7 @@ provider "alta" {
     host_key_fingerprint = "SHA256:test"
   }
 }
-`, readOnly, cloudtest.SiteID, cloudtest.DeviceID)
+`, cloudtest.SiteID, cloudtest.DeviceID)
 }
 
 func providerBlock(readOnly bool) string {

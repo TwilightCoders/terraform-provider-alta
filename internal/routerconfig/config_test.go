@@ -271,3 +271,30 @@ func TestDeviceSectionsNeedADevice(t *testing.T) {
 		t.Error("writing a switch port without a device was accepted")
 	}
 }
+
+// TestVLANDerivedNames covers the names a configuration would otherwise repeat by hand:
+// the router's name for a network, its bridge, and the subnet every host on it sits in.
+func TestVLANDerivedNames(t *testing.T) {
+	for _, tc := range []struct {
+		vlan                            VLAN
+		network, iface, gateway, subnet string
+	}{
+		{VLAN{ID: 1, RouterIP: "192.0.2.1/24"}, "lan", "br-lan", "192.0.2.1", "192.0.2.0/24"},
+		{VLAN{ID: 30, RouterIP: "198.18.30.1/24"}, "lan_30", "br-lan_30", "198.18.30.1", "198.18.30.0/24"},
+		{VLAN{ID: 7, RouterIP: "198.18.7.129/25"}, "lan_7", "br-lan_7", "198.18.7.129", "198.18.7.128/25"},
+		{VLAN{ID: 8}, "lan_8", "br-lan_8", "", ""},
+	} {
+		if got := tc.vlan.NetworkName(); got != tc.network {
+			t.Errorf("VLAN %d network = %q, want %q", tc.vlan.ID, got, tc.network)
+		}
+		if got := tc.vlan.Interface(); got != tc.iface {
+			t.Errorf("VLAN %d interface = %q, want %q", tc.vlan.ID, got, tc.iface)
+		}
+		if got := tc.vlan.Gateway(); got != tc.gateway {
+			t.Errorf("VLAN %d gateway = %q, want %q", tc.vlan.ID, got, tc.gateway)
+		}
+		if got := tc.vlan.Subnet(); got != tc.subnet {
+			t.Errorf("VLAN %d subnet = %q, want %q", tc.vlan.ID, got, tc.subnet)
+		}
+	}
+}

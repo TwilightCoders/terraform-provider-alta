@@ -140,7 +140,7 @@ func TestPortForwardLeavesOtherForwardsAlone(t *testing.T) {
 func TestPortForwardDefaultsToTheProviderSite(t *testing.T) {
 	h := newHarness(t)
 	const name = "alta_port_forward.sip"
-	config := providerBlockWithSite(false) + fmt.Sprintf(`
+	config := providerBlockWithSite() + fmt.Sprintf(`
 resource "alta_port_forward" "sip" {
   id = %q
 

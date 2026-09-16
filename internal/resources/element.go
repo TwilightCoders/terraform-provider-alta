@@ -172,18 +172,18 @@ func (e element[T]) refuseUnwritable(req resource.ModifyPlanRequest, resp *resou
 	}
 }
 
-// planGeneratedID refuses a change that cannot be applied, and fills in an id the user did
-// not choose. Without that the id is unknown until apply, which leaves every plan for a new
-// item reading "known after apply" where its identity should be.
+// planGeneratedID refuses a change that cannot be applied, and fills in the identities the
+// provider supplies.
+//
+// It deliberately does not invent the item's own id here. Terraform re-plans a resource
+// whose dependencies are still unknown, so anything generated at plan time is generated
+// again and the second value contradicts the first — a planned value that changes during
+// apply is a provider bug, and it only appears once resources refer to each other. An id
+// nobody chose is therefore known after apply, and generated once, in Create.
 func (e element[T]) planGeneratedID(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	e.refuseUnwritable(req, resp)
 	if req.Plan.Raw.IsNull() || resp.Diagnostics.HasError() {
 		return
-	}
-	var id types.String
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, idPath, &id)...)
-	if id.IsUnknown() {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, idPath, types.StringValue(newAltaID()))...)
 	}
 	e.planDefaults(ctx, resp)
 }

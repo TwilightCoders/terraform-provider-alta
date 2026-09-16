@@ -121,7 +121,7 @@ func TestDHCPReservationKeepsTheClientVLAN(t *testing.T) {
 // the client lives lands there anyway — including in the id, which is built from the site.
 func TestDHCPReservationDefaultsToTheProviderSite(t *testing.T) {
 	h := newHarness(t)
-	config := providerBlockWithSite(false) + fmt.Sprintf(`
+	config := providerBlockWithSite() + fmt.Sprintf(`
 resource "alta_dhcp_reservation" "printer" {
   mac = %q
   ip  = "192.0.2.40"

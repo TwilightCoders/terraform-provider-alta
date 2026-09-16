@@ -3,6 +3,7 @@ package routerconfig
 import (
 	"cmp"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,41 @@ type VLAN struct {
 	DHCP        bool
 	Isolation   bool
 	MDNS        *bool
+}
+
+// NetworkName is what the router calls this network: the name that appears in a firewall
+// zone's member list and that an interface route points at. The untagged network keeps the
+// bare name; every other VLAN is suffixed with its number.
+//
+// Observed on a running router in two places at once — the zone member lists and the DNS
+// forwarder's listen interfaces — rather than documented anywhere.
+func (v VLAN) NetworkName() string {
+	if v.ID <= 1 {
+		return "lan"
+	}
+	return "lan_" + strconv.FormatInt(v.ID, 10)
+}
+
+// Interface is the bridge the router puts this network on.
+func (v VLAN) Interface() string { return "br-" + v.NetworkName() }
+
+// Gateway is the router's own address on this network, without the prefix.
+func (v VLAN) Gateway() string {
+	address, _, found := strings.Cut(v.RouterIP, "/")
+	if !found {
+		return ""
+	}
+	return address
+}
+
+// Subnet is the network this VLAN addresses, so that hosts on it can be derived from one
+// place rather than written out again for every reservation and firewall rule.
+func (v VLAN) Subnet() string {
+	prefix, err := netip.ParsePrefix(v.RouterIP)
+	if err != nil {
+		return ""
+	}
+	return prefix.Masked().String()
 }
 
 var vlans = listCodec[VLAN]{
