@@ -24,6 +24,10 @@ type Hook struct {
 	Script   string
 	// Run asks for the hook to run once now, rather than only at the next event.
 	Run bool
+	// Requires are binaries the script needs. They are checked on the router before the
+	// hook is written, so a missing one is a clear error now rather than a silent failure
+	// at the next boot.
+	Requires []string
 }
 
 // DefaultPriority sorts provider hooks after the router's own interface scripts.
@@ -164,11 +168,13 @@ func (e *Extensions) loaderBlock() string {
 	return fmt.Sprintf(`
 # >>> %s >>>
 for f in %s/hotplug/*; do
-  [ -r "$f" ] && install -m 755 "$f" %s/
+  [ -r "$f" ] || continue
+  { cp "$f" %s/ && chmod 755 %s/"$(basename "$f")"; } 2>&1 | logger -t alta-hooks
 done
 for f in %s/boot/*.sh; do
-  [ -r "$f" ] && sh "$f" 2>&1 | logger -t alta-hooks
+  [ -r "$f" ] || continue
+  sh "$f" 2>&1 | logger -t alta-hooks
 done
 # <<< %s <<<
-`, loaderMarker, e.layout.HookDir, e.layout.HotplugDir, e.layout.HookDir, loaderMarker)
+`, loaderMarker, e.layout.HookDir, e.layout.HotplugDir, e.layout.HotplugDir, e.layout.HookDir, loaderMarker)
 }

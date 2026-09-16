@@ -1,4 +1,9 @@
 set -eu
+# The router's shell is busybox: it has no `install`, and a hook that relies on a missing
+# binary fails at boot where nobody sees it. Check before writing anything.
+for cmd in cp chmod mkdir sha256sum logger{{range .Hook.Requires}} {{q .}}{{end}}; do
+  command -v "$cmd" >/dev/null 2>&1 || { echo "the router has no $cmd" >&2; exit 3; }
+done
 H={{q .HookDir}}
 name={{q .Hook.Name}}
 mkdir -p "$H/hotplug" "$H/boot"
@@ -29,7 +34,8 @@ LOADER
 fi
 
 {{if .Hook.Interface}}
-install -m 755 "$target" {{q .HotplugDir}}/{{.Hook.FileName}}
+cp "$target" {{q .HotplugDir}}/{{.Hook.FileName}}
+chmod 755 {{q .HotplugDir}}/{{.Hook.FileName}}
 {{end}}
 {{if .Hook.Run}}
 # Run it the way its event would, so a hotplug hook's own guards let it through.

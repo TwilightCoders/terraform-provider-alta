@@ -38,6 +38,7 @@ type deviceHookModel struct {
 	Priority      types.String `tfsdk:"priority"`
 	Script        types.String `tfsdk:"script"`
 	DestroyScript types.String `tfsdk:"destroy_script"`
+	Requires      *[]string    `tfsdk:"requires"`
 	RunOnApply    types.Bool   `tfsdk:"run_on_apply"`
 	Path          types.String `tfsdk:"path"`
 	SHA256        types.String `tfsdk:"sha256"`
@@ -51,6 +52,7 @@ func (m deviceHookModel) hook() device.Hook {
 		Priority:  m.Priority.ValueString(),
 		Script:    m.Script.ValueString(),
 		Run:       m.RunOnApply.ValueBool(),
+		Requires:  deref(m.Requires),
 	}
 }
 
@@ -99,6 +101,12 @@ func (r *DeviceHook) Schema(_ context.Context, _ resource.SchemaRequest, resp *r
 				Optional: true,
 				MarkdownDescription: "Shell run when the hook is destroyed, to undo what it asserted. Without one, " +
 					"the hook's effect lasts until the router next reboots.",
+			},
+			"requires": schema.ListAttribute{
+				Optional: true, ElementType: types.StringType,
+				MarkdownDescription: "Binaries the script needs, e.g. `iptables`. They are checked on the router before " +
+					"the hook is written, so a missing one fails here instead of silently at the next boot. The router " +
+					"runs busybox: it has no `install`, for example.",
 			},
 			"run_on_apply": schema.BoolAttribute{
 				Optional: true, Computed: true, Default: booldefault.StaticBool(true),

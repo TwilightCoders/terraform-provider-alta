@@ -183,3 +183,37 @@ func TestHookFileNames(t *testing.T) {
 		}
 	}
 }
+
+func TestHookRefusesWhenTheRouterLacksABinary(t *testing.T) {
+	r := newHookRouter(t)
+	hook := resolverHook
+	hook.Script, hook.Run = "true\n", false
+	hook.Requires = []string{"iptables-but-not-really"}
+
+	_, err := r.ext.Put(context.Background(), hook)
+	if err == nil || !strings.Contains(err.Error(), "iptables-but-not-really") {
+		t.Fatalf("err = %v, want the missing binary named", err)
+	}
+	if r.read(filepath.Join("tf.d", "hotplug", hook.FileName())) != "" {
+		t.Error("the hook was written despite the missing binary")
+	}
+}
+
+// TestGeneratedShellAvoidsAbsentBusyboxCommands guards the class of bug that shipped:
+// a command that exists on a developer's machine and not on the router, in generated
+// shell that only runs at boot.
+func TestGeneratedShellAvoidsAbsentBusyboxCommands(t *testing.T) {
+	absent := []string{"install", "realpath", "timeout -k", "readlink -f", "sed -i ", "head -n -"}
+	ext := NewExtensions(localRunner{}, Route10Layout())
+	rendered := map[string]string{"loader": ext.loaderBlock()}
+	for _, name := range []string{"hook-put.sh", "hook-get.sh", "hook-delete.sh"} {
+		rendered[name] = render(name, ext.data(Hook{Name: "x", Interface: "wg0", Script: "true"}))
+	}
+	for name, script := range rendered {
+		for _, cmd := range absent {
+			if strings.Contains(script, cmd+" ") || strings.Contains(script, cmd+"\n") {
+				t.Errorf("%s uses %q, which the router's busybox does not have", name, cmd)
+			}
+		}
+	}
+}

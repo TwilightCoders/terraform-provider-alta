@@ -9,6 +9,10 @@ resource "alta_device_hook" "resolver_exemption" {
   name      = "resolver-exemption"
   interface = "wg0"
 
+  # Checked on the router before anything is written. The router runs busybox, so a
+  # script that assumes a coreutils binary fails at boot where nobody sees it.
+  requires = ["iptables", "flock", "setsid"]
+
   script = <<-SH
     # Hold the rule for a minute, detached: the service that owns this chain may rebuild
     # it several seconds after ifup, which would silently drop a single assertion.

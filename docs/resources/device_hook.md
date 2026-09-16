@@ -30,6 +30,10 @@ resource "alta_device_hook" "resolver_exemption" {
   name      = "resolver-exemption"
   interface = "wg0"
 
+  # Checked on the router before anything is written. The router runs busybox, so a
+  # script that assumes a coreutils binary fails at boot where nobody sees it.
+  requires = ["iptables", "flock", "setsid"]
+
   script = <<-SH
     # Hold the rule for a minute, detached: the service that owns this chain may rebuild
     # it several seconds after ifup, which would silently drop a single assertion.
@@ -64,6 +68,7 @@ resource "alta_device_hook" "resolver_exemption" {
 - `destroy_script` (String) Shell run when the hook is destroyed, to undo what it asserted. Without one, the hook's effect lasts until the router next reboots.
 - `interface` (String) Network interface to hook, e.g. `wg0`. With no interface the script runs at boot and after every configuration push.
 - `priority` (String) Orders this hook among the router's other interface scripts. Defaults to `99-zz`, which runs after the router's own.
+- `requires` (List of String) Binaries the script needs, e.g. `iptables`. They are checked on the router before the hook is written, so a missing one fails here instead of silently at the next boot. The router runs busybox: it has no `install`, for example.
 - `run_on_apply` (Boolean) Run the hook once when it is created or changed, rather than waiting for its event.
 
 ### Read-Only
