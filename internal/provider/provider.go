@@ -248,11 +248,12 @@ func Build(s Settings) (*resources.ProviderData, error) {
 		return nil, fmt.Errorf("router connection: %w", err)
 	}
 	data.Transactions = txn.New(client, device.NewGate(runner, s.Gate), txn.Options{Settle: s.Settle})
+	data.Hooks = device.NewExtensions(runner, s.Gate.Layout)
 	return data, nil
 }
 
 func (p *Provider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{resources.NewRouterConfig}
+	return []func() resource.Resource{resources.NewRouterConfig, resources.NewDeviceHook}
 }
 
 func (p *Provider) DataSources(_ context.Context) []func() datasource.DataSource {

@@ -34,6 +34,14 @@ resource "alta_router_config" "router" {
   device_id = "…"
   # port_forwards, firewall_rules, vlans, static_routes, switch_ports, dhcp_reservations
 }
+
+# For the few behaviours the cloud has no concept of: a script the router runs for
+# itself, reinstalled after every boot and push. Touches the router only, never the cloud.
+resource "alta_device_hook" "example" {
+  name      = "example"
+  interface = "wg0"
+  script    = "…"
+}
 ```
 
 Credentials come from `ALTA_LABS_EMAIL` and `ALTA_LABS_PASSWORD`. Import an existing router

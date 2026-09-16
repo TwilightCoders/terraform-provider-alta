@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/device"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
 )
 
@@ -24,11 +25,20 @@ type Transactor interface {
 	Run(ctx context.Context, change txn.Change) (txn.Result, error)
 }
 
+// DeviceHooks manages scripts the router runs for itself.
+type DeviceHooks interface {
+	Put(ctx context.Context, h device.Hook) (device.HookState, error)
+	Get(ctx context.Context, h device.Hook) (device.HookState, error)
+	Delete(ctx context.Context, h device.Hook, destroy string) error
+}
+
 // ProviderData is what the provider hands to resources.
 type ProviderData struct {
 	Cloud CloudReader
 	// Transactions is nil when the provider has no router connection; reads still work.
 	Transactions Transactor
+	// Hooks is nil without a router connection.
+	Hooks DeviceHooks
 	// ReadOnly refuses every change, for importing and planning against production.
 	ReadOnly bool
 }

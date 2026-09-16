@@ -25,6 +25,11 @@ type Layout struct {
 	AgentRunning string
 	Apply        string
 	Log          string
+	// HookDir holds provider-managed hooks; HotplugDir is where interface hooks are
+	// installed for the current boot; PostCfg runs after every boot and configuration push.
+	HookDir    string
+	HotplugDir string
+	PostCfg    string
 	// Detach starts the rollback timer in its own session so it outlives the SSH session.
 	Detach string
 }
@@ -42,6 +47,9 @@ func Route10Layout() Layout {
 		Apply:        "cfg",
 		Log:          "logger -t alta-tf",
 		Detach:       "setsid",
+		HookDir:      "/cfg/tf.d",
+		HotplugDir:   "/etc/hotplug.d/iface",
+		PostCfg:      "/cfg/post-cfg.sh",
 	}
 }
 
@@ -52,7 +60,7 @@ type scriptData struct {
 	ProbeSpec
 }
 
-func render(name string, data scriptData) string {
+func render(name string, data any) string {
 	var buf bytes.Buffer
 	if err := scripts.ExecuteTemplate(&buf, name, data); err != nil {
 		panic("device: rendering " + name + ": " + err.Error())

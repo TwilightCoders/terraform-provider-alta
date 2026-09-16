@@ -38,8 +38,9 @@ func (f *fakeTransactor) Run(ctx context.Context, c txn.Change) (txn.Result, err
 }
 
 type harness struct {
-	api *cloudtest.Server
-	tx  *fakeTransactor
+	api   *cloudtest.Server
+	tx    *fakeTransactor
+	hooks resources.DeviceHooks
 }
 
 func newHarness(t *testing.T) *harness {
@@ -55,6 +56,7 @@ func (h *harness) factories() map[string]func() (tfprotov6.ProviderServer, error
 			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly}
 			if s.SSH != nil {
 				data.Transactions = h.tx
+				data.Hooks = h.hooks
 			}
 			return data, nil
 		}}),
