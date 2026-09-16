@@ -38,6 +38,85 @@ func endpointAttribute(description string) schema.SingleNestedAttribute {
 	}
 }
 
+// Attribute sets shared by alta_router_config's sections and the single-item resources,
+// so one description of a field serves both.
+
+func portForwardAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"description": optionalString("Name shown in the portal."),
+		"protocols": schema.SetAttribute{
+			Required: true, ElementType: types.StringType,
+			MarkdownDescription: "Protocols to forward.",
+		},
+		"ip_version":  optionalString("`ipv4`, `ipv6` or `any`."),
+		"zone_in":     requiredString("Zone the traffic arrives from, usually `wan`."),
+		"zone_out":    optionalString("Zone of the destination host."),
+		"source":      endpointAttribute("Restrict the forward to these sources."),
+		"destination": endpointAttribute("Address and port the traffic is sent to."),
+		"translation": endpointAttribute("Internal address and port it is forwarded to."),
+	}
+}
+
+func firewallRuleAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"description": optionalString("Name shown in the portal."),
+		"action":      requiredString("`ACCEPT`, `DROP` or `REJECT`.", stringvalidator.OneOf("ACCEPT", "DROP", "REJECT")),
+		"protocols": schema.SetAttribute{
+			Optional: true, ElementType: types.StringType,
+			MarkdownDescription: "Protocols the rule matches; all when omitted.",
+		},
+		"ip_version": optionalString("`ipv4`, `ipv6` or `any`."),
+		"icmp_types": schema.SetAttribute{
+			Optional: true, ElementType: types.StringType,
+			MarkdownDescription: "ICMP types, for ICMP rules.",
+		},
+		"zone_in":     optionalString("Zone the traffic arrives from."),
+		"zone_out":    optionalString("Zone the traffic is going to."),
+		"source":      endpointAttribute("Source match."),
+		"destination": endpointAttribute("Destination match."),
+		"limit":       optionalString("Rate limit, e.g. `1000/sec`."),
+	}
+}
+
+func vlanAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"name":      optionalString("Name shown in the portal."),
+		"router_ip": optionalString("Router address and prefix, e.g. `203.0.113.1/24`."),
+		"pool_size": schema.Int64Attribute{Optional: true, MarkdownDescription: "DHCP pool size."},
+		"reserved_ips": schema.Int64Attribute{
+			Optional: true, MarkdownDescription: "Addresses at the start of the subnet kept out of the pool.",
+		},
+		"dns_servers": schema.ListAttribute{
+			Optional: true, ElementType: types.StringType,
+			MarkdownDescription: "DNS servers handed out by DHCP, in order.",
+		},
+		"domain_name": optionalString("DHCP domain name."),
+		"dhcp": schema.BoolAttribute{
+			Optional: true, Computed: true, Default: booldefault.StaticBool(true),
+			MarkdownDescription: "Serve DHCP on this network.",
+		},
+		"isolation": schema.BoolAttribute{
+			Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+			MarkdownDescription: "Isolate clients from each other.",
+		},
+		"mdns": schema.BoolAttribute{Optional: true, MarkdownDescription: "Repeat mDNS into this network."},
+	}
+}
+
+func switchPortAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"native_vlan": schema.Int64Attribute{Optional: true, MarkdownDescription: "Untagged VLAN; the default VLAN when omitted."},
+		"all_vlans": schema.BoolAttribute{
+			Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+			MarkdownDescription: "Tag every VLAN on this port.",
+		},
+		"tagged_vlans": schema.SetAttribute{
+			Optional: true, ElementType: types.Int64Type,
+			MarkdownDescription: "VLANs tagged on this port, when `all_vlans` is false.",
+		},
+	}
+}
+
 // staticRouteAttributes describes one route, for both alta_static_route and the
 // static_routes section of alta_router_config.
 func staticRouteAttributes() map[string]schema.Attribute {
@@ -77,69 +156,20 @@ func routerConfigSchema() schema.Schema {
 			"port_forwards": schema.MapNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "Destination NAT rules, keyed by Alta rule id.",
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"description": optionalString("Name shown in the portal."),
-					"protocols": schema.SetAttribute{
-						Required: true, ElementType: types.StringType,
-						MarkdownDescription: "Protocols to forward.",
-					},
-					"ip_version":  optionalString("`ipv4`, `ipv6` or `any`."),
-					"zone_in":     requiredString("Zone the traffic arrives from, usually `wan`."),
-					"zone_out":    optionalString("Zone of the destination host."),
-					"source":      endpointAttribute("Restrict the forward to these sources."),
-					"destination": endpointAttribute("Address and port the traffic is sent to."),
-					"translation": endpointAttribute("Internal address and port it is forwarded to."),
-				}},
+				NestedObject:        schema.NestedAttributeObject{Attributes: portForwardAttributes()},
 			},
 			"firewall_rules": schema.ListNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "Filter rules, in evaluation order.",
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"id":          requiredString("Alta rule id."),
-					"description": optionalString("Name shown in the portal."),
-					"action":      requiredString("`ACCEPT`, `DROP` or `REJECT`.", stringvalidator.OneOf("ACCEPT", "DROP", "REJECT")),
-					"protocols": schema.SetAttribute{
-						Optional: true, ElementType: types.StringType,
-						MarkdownDescription: "Protocols the rule matches; all when omitted.",
-					},
-					"ip_version": optionalString("`ipv4`, `ipv6` or `any`."),
-					"icmp_types": schema.SetAttribute{
-						Optional: true, ElementType: types.StringType,
-						MarkdownDescription: "ICMP types, for ICMP rules.",
-					},
-					"zone_in":     optionalString("Zone the traffic arrives from."),
-					"zone_out":    optionalString("Zone the traffic is going to."),
-					"source":      endpointAttribute("Source match."),
-					"destination": endpointAttribute("Destination match."),
-					"limit":       optionalString("Rate limit, e.g. `1000/sec`."),
-				}},
+				NestedObject: schema.NestedAttributeObject{Attributes: with(map[string]schema.Attribute{
+					"id": requiredString("Alta rule id."),
+				}, firewallRuleAttributes())},
 			},
 			"vlans": schema.MapNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "Networks, keyed by VLAN id.",
 				Validators:          []validator.Map{numericKey},
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"name":      optionalString("Name shown in the portal."),
-					"router_ip": optionalString("Router address and prefix, e.g. `203.0.113.1/24`."),
-					"pool_size": schema.Int64Attribute{Optional: true, MarkdownDescription: "DHCP pool size."},
-					"reserved_ips": schema.Int64Attribute{
-						Optional: true, MarkdownDescription: "Addresses at the start of the subnet kept out of the pool.",
-					},
-					"dns_servers": schema.ListAttribute{
-						Optional: true, ElementType: types.StringType,
-						MarkdownDescription: "DNS servers handed out by DHCP, in order.",
-					},
-					"domain_name": optionalString("DHCP domain name."),
-					"dhcp": schema.BoolAttribute{
-						Optional: true, Computed: true, Default: booldefault.StaticBool(true),
-						MarkdownDescription: "Serve DHCP on this network.",
-					},
-					"isolation": schema.BoolAttribute{
-						Optional: true, Computed: true, Default: booldefault.StaticBool(false),
-						MarkdownDescription: "Isolate clients from each other.",
-					},
-					"mdns": schema.BoolAttribute{Optional: true, MarkdownDescription: "Repeat mDNS into this network."},
-				}},
+				NestedObject:        schema.NestedAttributeObject{Attributes: vlanAttributes()},
 			},
 			"static_routes": schema.MapNestedAttribute{
 				Optional:            true,
@@ -150,18 +180,8 @@ func routerConfigSchema() schema.Schema {
 				Optional: true,
 				MarkdownDescription: "VLAN membership of physical ports, keyed by the portal's port index. " +
 					"Listed ports are managed; other ports and port settings such as speed or PoE are left alone.",
-				Validators: []validator.Map{numericKey},
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"native_vlan": schema.Int64Attribute{Optional: true, MarkdownDescription: "Untagged VLAN; the default VLAN when omitted."},
-					"all_vlans": schema.BoolAttribute{
-						Optional: true, Computed: true, Default: booldefault.StaticBool(false),
-						MarkdownDescription: "Tag every VLAN on this port.",
-					},
-					"tagged_vlans": schema.SetAttribute{
-						Optional: true, ElementType: types.Int64Type,
-						MarkdownDescription: "VLANs tagged on this port, when `all_vlans` is false.",
-					},
-				}},
+				Validators:   []validator.Map{numericKey},
+				NestedObject: schema.NestedAttributeObject{Attributes: switchPortAttributes()},
 			},
 			"dhcp_reservations": schema.MapAttribute{
 				Optional:            true,

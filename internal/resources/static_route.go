@@ -84,17 +84,7 @@ func (r *StaticRoute) Configure(_ context.Context, req resource.ConfigureRequest
 }
 
 func (r *StaticRoute) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	r.refuseUnwritable(req, resp)
-	if req.Plan.Raw.IsNull() || resp.Diagnostics.HasError() {
-		return
-	}
-	// An id the user did not choose is known only at apply, which would leave every plan
-	// unreadable; generating it here keeps the plan concrete.
-	var id types.String
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, idPath, &id)...)
-	if id.IsUnknown() {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, idPath, types.StringValue(newAltaID()))...)
-	}
+	r.planGeneratedID(ctx, req, resp)
 }
 
 func (r *StaticRoute) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -102,9 +92,7 @@ func (r *StaticRoute) Create(ctx context.Context, req resource.CreateRequest, re
 	if resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...); resp.Diagnostics.HasError() {
 		return
 	}
-	if plan.ID.IsUnknown() || plan.ID.ValueString() == "" {
-		plan.ID = types.StringValue(newAltaID())
-	}
+	plan.ID = generatedID(plan.ID)
 	r.write(ctx, plan, &resp.State, &resp.Diagnostics)
 }
 

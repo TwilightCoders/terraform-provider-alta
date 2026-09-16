@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/txn"
@@ -155,6 +156,29 @@ func (e element[T]) refuseUnwritable(req resource.ModifyPlanRequest, resp *resou
 		resp.Diagnostics.AddError("Router connection required",
 			fmt.Sprintf("Changing a %s needs the provider's ssh block, so the push can be gated and rolled back.", e.in.label))
 	}
+}
+
+// planGeneratedID refuses a change that cannot be applied, and fills in an id the user did
+// not choose. Without that the id is unknown until apply, which leaves every plan for a new
+// item reading "known after apply" where its identity should be.
+func (e element[T]) planGeneratedID(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	e.refuseUnwritable(req, resp)
+	if req.Plan.Raw.IsNull() || resp.Diagnostics.HasError() {
+		return
+	}
+	var id types.String
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, idPath, &id)...)
+	if id.IsUnknown() {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, idPath, types.StringValue(newAltaID()))...)
+	}
+}
+
+// generatedID returns the planned id, or a new one when the plan left it unset.
+func generatedID(id types.String) types.String {
+	if id.IsUnknown() || id.ValueString() == "" {
+		return types.StringValue(newAltaID())
+	}
+	return id
 }
 
 // siteAttributes are the attributes every single-item resource carries.

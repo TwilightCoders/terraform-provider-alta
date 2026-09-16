@@ -64,18 +64,27 @@ func (h *harness) factories() map[string]func() (tfprotov6.ProviderServer, error
 	}
 }
 
-// routes reads the site's routes back out of the fake cloud, so a test can assert what a
-// single-item resource did to the array it shares with everything else.
-func (h *harness) routes() ([]routerconfig.StaticRoute, error) {
+// config reads the cloud back as configuration, so a test can assert what a single-item
+// resource did to the collection it shares with everything else.
+func (h *harness) config() (routerconfig.Config, error) {
 	state, err := h.api.Client().State(context.Background(), cloudtest.SiteID)
 	if err != nil {
-		return nil, err
+		return routerconfig.Config{}, err
 	}
 	doc, err := routerconfig.NewDocument(cloudtest.SiteID, cloudtest.DeviceID, h.api.Site(), state)
 	if err != nil {
+		return routerconfig.Config{}, err
+	}
+	return routerconfig.Read(doc), nil
+}
+
+// routes is the collection alta_static_route writes into.
+func (h *harness) routes() ([]routerconfig.StaticRoute, error) {
+	c, err := h.config()
+	if err != nil {
 		return nil, err
 	}
-	return *routerconfig.Read(doc).StaticRoutes, nil
+	return *c.StaticRoutes, nil
 }
 
 // seedRoute puts a route in the cloud that Terraform does not manage.
@@ -85,6 +94,24 @@ func (h *harness) seedRoute(id, network string) {
 	site["routes"] = append(routes, cloud.Object{
 		"id": id, "name": id, "type": "blackhole", "network": network,
 	})
+}
+
+// sameIDs compares a collection's ids against what it should hold, in order, so a test
+// that cares about untouched neighbours also catches a reshuffle.
+func sameIDs(read func() ([]string, error), want []string) error {
+	got, err := read()
+	if err != nil {
+		return err
+	}
+	if len(got) != len(want) {
+		return fmt.Errorf("ids = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return fmt.Errorf("ids = %v, want %v", got, want)
+		}
+	}
+	return nil
 }
 
 func providerBlock(readOnly bool) string {

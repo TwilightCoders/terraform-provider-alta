@@ -11,7 +11,10 @@ import (
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
 )
 
-func staticRouteConfig(id, network string) string {
+// routeID is the route these tests own; the fixture holds no routes of its own.
+const routeID = "vpnret"
+
+func staticRouteConfig(network string) string {
 	return providerBlock(false) + fmt.Sprintf(`
 resource "alta_static_route" "vpnret" {
   site_id   = %q
@@ -23,7 +26,7 @@ resource "alta_static_route" "vpnret" {
   network  = %q
   next_hop = "192.0.2.10"
 }
-`, cloudtest.SiteID, cloudtest.DeviceID, id, network)
+`, cloudtest.SiteID, cloudtest.DeviceID, routeID, network)
 }
 
 // TestStaticRouteLifecycle covers the loop the whole provider is judged on: create,
@@ -36,7 +39,7 @@ func TestStaticRouteLifecycle(t *testing.T) {
 		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{
 			{
-				Config: staticRouteConfig("vpnret", "198.18.20.0/28"),
+				Config: staticRouteConfig("198.18.20.0/28"),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(name, "network", "198.18.20.0/28"),
 					func(*terraform.State) error {
@@ -51,9 +54,9 @@ func TestStaticRouteLifecycle(t *testing.T) {
 					},
 				),
 			},
-			{Config: staticRouteConfig("vpnret", "198.18.20.0/28"), PlanOnly: true},
+			{Config: staticRouteConfig("198.18.20.0/28"), PlanOnly: true},
 			{
-				Config: staticRouteConfig("vpnret", "198.18.21.0/28"),
+				Config: staticRouteConfig("198.18.21.0/28"),
 				Check:  resource.TestCheckResourceAttr(name, "network", "198.18.21.0/28"),
 			},
 			{
@@ -86,7 +89,7 @@ func TestStaticRouteLeavesOtherRoutesAlone(t *testing.T) {
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{{
-			Config: staticRouteConfig("vpnret", "198.18.20.0/28"),
+			Config: staticRouteConfig("198.18.20.0/28"),
 			Check: func(*terraform.State) error {
 				routes, err := h.routes()
 				if err != nil {
@@ -117,7 +120,7 @@ func TestStaticRouteRefusedWhenReadOnly(t *testing.T) {
 		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{{
 			Config: regexp.MustCompile(`read_only = false`).ReplaceAllString(
-				staticRouteConfig("vpnret", "198.18.20.0/28"), "read_only = true"),
+				staticRouteConfig("198.18.20.0/28"), "read_only = true"),
 			ExpectError: regexp.MustCompile(`read_only`),
 		}},
 	})

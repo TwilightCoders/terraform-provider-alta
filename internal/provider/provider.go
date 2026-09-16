@@ -256,6 +256,11 @@ func (p *Provider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		resources.NewRouterConfig,
 		resources.NewStaticRoute,
+		resources.NewVLAN,
+		resources.NewPortForward,
+		resources.NewFirewallRule,
+		resources.NewSwitchPort,
+		resources.NewDHCPReservation,
 		resources.NewDeviceHook,
 		resources.NewDeviceFile,
 	}
