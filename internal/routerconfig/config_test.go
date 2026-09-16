@@ -254,3 +254,20 @@ func TestStaticRouteValidationMatchesThePortalForm(t *testing.T) {
 		}
 	}
 }
+
+// TestDeviceSectionsNeedADevice keeps a site-scoped document from silently dropping a
+// change that belongs to a device: most of a site has nothing to do with one, so the
+// device is optional, and asking for it only where it is needed has to fail loudly.
+func TestDeviceSectionsNeedADevice(t *testing.T) {
+	doc, err := NewDocument("site", "", cloud.Object{}, cloud.State{})
+	if err != nil {
+		t.Fatalf("a document without a device: %v", err)
+	}
+	if got := Read(doc).SwitchPorts; got == nil || len(*got) != 0 {
+		t.Errorf("switch ports = %v, want none", got)
+	}
+	ports := []SwitchPort{{Port: 1, AllVLANs: true}}
+	if err := (Config{SwitchPorts: &ports}).Apply(doc); err == nil {
+		t.Error("writing a switch port without a device was accepted")
+	}
+}

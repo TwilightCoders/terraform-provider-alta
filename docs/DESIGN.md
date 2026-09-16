@@ -46,7 +46,7 @@ There is no version field: the last writer wins on a whole key.
 
 **SSH to the router** (secondary). Used only to gate, verify and roll back pushes, and for
 device extensions the portal cannot express. The host key is pinned, a fresh connection is
-dialled per script, and connections are serialised (see §6). No local HTTP configuration
+dialled per script, and connections are serialised (see §7). No local HTTP configuration
 API exists on the router.
 
 ## 3. Mapping configuration to cloud objects
@@ -69,7 +69,55 @@ the cloud documents and diffs them into the minimal set of writes, with a pre-im
 | `switch_ports` | `device.portsCfg.ports{}` |
 | `dhcp_reservations` | `clients[].config.ip` |
 
-## 4. Every change is one gated, commit-confirmed transaction
+## 4. Where a setting lives, and what decides it
+
+A router's configuration passes through two compilers, and they do not accept the same
+vocabulary:
+
+- the **cloud** compiles its objects into `config.json`, and silently drops any key it has
+  no field for — tested directly, not inferred;
+- the **router** compiles `config.json` into `/etc/config/*`, and reads a strictly larger
+  set of keys than the cloud ever emits.
+
+So a key can be real, honoured by the router, and still unreachable through the API. That
+makes "where does this setting live?" a question with three answers, and the point of this
+design is that the answer is **derived from evidence rather than decided per field in
+code**. `api/schema.json` already records both halves — what the portal writes, fitted from
+captured responses, and what the router's compiler reads — and that record is what places a
+field.
+
+| The cloud has a field | Realisation | Consequence |
+|---|---|---|
+| yes | a cloud write, through the gate | the portal shows it; durable; survives everything |
+| no, but the router's compiler reads the key | an overlay on `config.json`, re-applied after each push | invisible to the portal, so only ever used where the portal has nothing to show |
+| neither | a hook | it is behaviour, not configuration |
+
+Two rules keep the tiers from fighting:
+
+**A field is never writable in two places.** If the cloud carries it, the overlay must
+refuse it — otherwise the portal and the router disagree and nobody can tell which won.
+
+**The third tier is not a dumping ground.** "It was easier as a script" is not a reason; the
+test is whether the thing being asserted is configuration at all. Repairs to an object some
+other package creates belong to that package, not here.
+
+### The overlay tier (designed, not yet built)
+
+`cfg` regenerates `/etc/config` and *then* runs `post-cfg.sh`, so an overlay applied by the
+provider's loader has to patch `config.json` and re-trigger a scoped regeneration
+(`cfg --reload <components>`). That terminates: the patch is idempotent, so the second pass
+finds nothing to do.
+
+Two constraints are absolute:
+
+- **`hash.txt` is never written.** It is the cloud agent's record of what it last sent, and
+  the agent skips a push whose config matches it. Falsifying it would make a real change
+  disappear.
+- **Local-edit detection stays exact.** The loader keeps the pre-overlay `config.json` and
+  its digest, so "the router carries edits the cloud does not know about" still has a
+  precise meaning: `config.json == overlay(base)` and `md5(base) == hash.txt`.
+
+## 5. Every change is one gated, commit-confirmed transaction
 
 Writing through the cloud means a partial change reaches the router as soon as it is
 saved. If it breaks connectivity, whatever is driving Terraform may lose the network needed
@@ -94,7 +142,7 @@ REPAIR   revert the cloud from the journal's pre-images · resume the agent
 Terraform has no end-of-apply hook, so the transaction boundary is the resource: one
 `alta_router_config` per router, one transaction per apply.
 
-## 5. Safety rails
+## 6. Safety rails
 
 - **Local edits guard:** no write while `md5(config.json) != hash.txt`.
 - **Concurrency:** apply re-reads the cloud and refuses if managed sections changed since
@@ -104,7 +152,7 @@ Terraform has no end-of-apply hook, so the transaction boundary is the resource:
 - **Cleanup** runs even if the apply is interrupted; an unreachable router is never
   released before it has rolled back.
 
-## 6. Device extensions
+## 7. Device extensions
 
 Some router behaviour has no cloud representation (for example firewall details of
 third-party VPN scripts). These belong in small, idempotent hooks that ride extension
@@ -123,7 +171,7 @@ together, which Terraform's default parallelism produces as soon as a plan refre
 several resources, so the provider dials one at a time and retries a refused connection —
 only ever one that never carried a script.
 
-## 7. The observed API description
+## 8. The observed API description
 
 `api/schema.json` is the single record of what the API looks like, kept honest by tests
 rather than by discipline:
@@ -148,7 +196,7 @@ disproves it. The compile checks therefore read that configuration and verify ea
 still behaves as recorded — including reporting a defect that has since been fixed, so a
 workaround is dropped rather than carried indefinitely.
 
-## 8. Testing
+## 9. Testing
 
 - Cognito SRP is pinned by a test vector shared with an independent implementation.
 - `routerconfig` is tested against anonymised fixtures captured before and after a real

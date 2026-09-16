@@ -38,7 +38,6 @@ var firewallRuleCollection = collection[routerconfig.FirewallRule]{
 // reflection has no notion of embedded structs, so the fields are repeated.
 type firewallRuleResourceModel struct {
 	SiteID      types.String   `tfsdk:"site_id"`
-	DeviceID    types.String   `tfsdk:"device_id"`
 	ID          types.String   `tfsdk:"id"`
 	Description types.String   `tfsdk:"description"`
 	Action      types.String   `tfsdk:"action"`
@@ -51,6 +50,11 @@ type firewallRuleResourceModel struct {
 	Destination *endpointModel `tfsdk:"destination"`
 	Limit       types.String   `tfsdk:"limit"`
 }
+
+func (m firewallRuleResourceModel) siteRef() types.String { return m.SiteID }
+
+// deviceRef is null: a filter rule belongs to the site, not to one of its devices.
+func (m firewallRuleResourceModel) deviceRef() types.String { return types.StringNull() }
 
 func (m firewallRuleResourceModel) rule() routerconfig.FirewallRule {
 	return routerconfig.FirewallRule{
@@ -124,7 +128,7 @@ func (r *FirewallRule) Read(ctx context.Context, req resource.ReadRequest, resp 
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	doc, err := r.document(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString())
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading firewall rule", err.Error())
 		return
@@ -142,18 +146,19 @@ func (r *FirewallRule) Delete(ctx context.Context, req resource.DeleteRequest, r
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.drop(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString(), state.ID.ValueString()); err != nil {
+	if err := r.drop(ctx, state, state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Removing firewall rule", err.Error())
 	}
 }
 
 // ImportState adopts a rule the portal already holds, in the place it already holds it.
 func (r *FirewallRule) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	site, device, id, ok := importParts(req.ID, &resp.Diagnostics, "firewall rule")
+	site, id, ok := r.siteScopedImport(req.ID, &resp.Diagnostics)
 	if !ok {
 		return
 	}
-	doc, err := r.document(ctx, site, device)
+	state := firewallRuleResourceModel{SiteID: types.StringValue(site), ID: types.StringValue(id)}
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading firewall rule", err.Error())
 		return
@@ -163,15 +168,11 @@ func (r *FirewallRule) ImportState(ctx context.Context, req resource.ImportState
 		resp.Diagnostics.AddError("No such firewall rule", "The site has no firewall rule with id "+id+".")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, firewallRuleResourceModel{
-		SiteID:   types.StringValue(site),
-		DeviceID: types.StringValue(device),
-		ID:       types.StringValue(id),
-	}.withRule(rule))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state.withRule(rule))...)
 }
 
 func (r *FirewallRule) write(ctx context.Context, plan firewallRuleResourceModel, state stateSetter, diags *diag.Diagnostics) {
-	if err := r.put(ctx, plan.SiteID.ValueString(), plan.DeviceID.ValueString(), plan.rule()); err != nil {
+	if err := r.put(ctx, plan, plan.rule()); err != nil {
 		diags.AddError("Writing firewall rule", err.Error())
 		return
 	}

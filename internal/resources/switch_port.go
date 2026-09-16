@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -43,6 +44,10 @@ var switchPortCollection = collection[routerconfig.SwitchPort]{
 // switchPortID is the description of id and the format it is built from.
 const switchPortID = "`<site_id>/<device_id>/<port>`."
 
+// switchPortImportForms are the import ids this resource accepts, named in the diagnostics
+// that refuse one.
+const switchPortImportForms = "`<port>`, `<device_id>/<port>`, or `<site_id>/<device_id>/<port>`"
+
 // switchPortResourceModel is the Terraform state of one port. The framework's reflection
 // has no notion of embedded structs, so the shared attributes are repeated here.
 type switchPortResourceModel struct {
@@ -54,6 +59,12 @@ type switchPortResourceModel struct {
 	AllVLANs    types.Bool   `tfsdk:"all_vlans"`
 	TaggedVLANs *[]int64     `tfsdk:"tagged_vlans"`
 }
+
+func (m switchPortResourceModel) siteRef() types.String { return m.SiteID }
+
+// deviceRef is the port's device: a port is a piece of hardware, so unlike most of a site's
+// configuration this resource genuinely belongs to one.
+func (m switchPortResourceModel) deviceRef() types.String { return m.DeviceID }
 
 func (m switchPortResourceModel) switchPort() routerconfig.SwitchPort {
 	return routerconfig.SwitchPort{
@@ -101,7 +112,7 @@ func (r *SwitchPort) Schema(_ context.Context, _ resource.SchemaRequest, resp *r
 }
 
 func switchPortResourceAttributes() map[string]schema.Attribute {
-	attributes := with(siteAttributes(switchPortID), switchPortAttributes())
+	attributes := with(with(siteAttributes(switchPortID), deviceAttribute()), switchPortAttributes())
 	// siteAttributes offers an id for items whose id the user chooses or the provider
 	// generates. A port already has a name the hardware gave it, so id only addresses it.
 	attributes["id"] = schema.StringAttribute{
@@ -126,12 +137,13 @@ func (r *SwitchPort) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequ
 	if req.Plan.Raw.IsNull() || resp.Diagnostics.HasError() {
 		return
 	}
-	// The id is derived, so resolving it here keeps the plan concrete rather than leaving
-	// every create showing "known after apply".
+	// The id is derived from the identities, so they are filled in first: resolving it here
+	// keeps the plan concrete rather than leaving every create showing "known after apply".
+	r.planDefaults(ctx, resp)
 	var model switchPortResourceModel
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("site_id"), &model.SiteID)...)
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("device_id"), &model.DeviceID)...)
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("port"), &model.Port)...)
+	resp.Diagnostics.Append(resp.Plan.GetAttribute(ctx, path.Root("site_id"), &model.SiteID)...)
+	resp.Diagnostics.Append(resp.Plan.GetAttribute(ctx, path.Root("device_id"), &model.DeviceID)...)
+	resp.Diagnostics.Append(resp.Plan.GetAttribute(ctx, path.Root("port"), &model.Port)...)
 	if resp.Diagnostics.HasError() || model.SiteID.IsUnknown() || model.DeviceID.IsUnknown() || model.Port.IsUnknown() {
 		return // Create resolves it instead, once the identity is known
 	}
@@ -159,7 +171,11 @@ func (r *SwitchPort) Read(ctx context.Context, req resource.ReadRequest, resp *r
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	doc, err := r.document(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString())
+	state, ok := r.resolve(state, &resp.Diagnostics)
+	if !ok {
+		return
+	}
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading switch port", err.Error())
 		return
@@ -188,38 +204,78 @@ func (r *SwitchPort) Delete(ctx context.Context, req resource.DeleteRequest, res
 
 // ImportState adopts a port the router already has.
 func (r *SwitchPort) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	site, device, key, ok := importParts(req.ID, &resp.Diagnostics, "port")
+	model, ok := r.importSwitchPort(req.ID, &resp.Diagnostics)
 	if !ok {
 		return
 	}
-	number, err := strconv.ParseInt(key, 10, 64)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid import id",
-			fmt.Sprintf("%q is not a port number. Use <site_id>/<device_id>/<port>, e.g. %s/%s/3.", key, site, device))
-		return
-	}
-	doc, err := r.document(ctx, site, device)
+	doc, err := r.document(ctx, model)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading switch port", err.Error())
 		return
 	}
-	port, found := r.find(doc, key)
+	port, found := r.find(doc, model.key())
 	if !found {
-		resp.Diagnostics.AddError("No such port", fmt.Sprintf("The router has no port %d.", number))
+		resp.Diagnostics.AddError("No such port", fmt.Sprintf("The router has no port %d.", model.Port.ValueInt64()))
 		return
 	}
-	model := switchPortResourceModel{
-		SiteID:   types.StringValue(site),
-		DeviceID: types.StringValue(device),
-		Port:     types.Int64Value(number),
-	}
-	model.ID = model.address()
 	resp.Diagnostics.Append(resp.State.Set(ctx, model.withSwitchPort(port))...)
 }
 
+// importSwitchPort reads one of switchPortImportForms. The site and the device are usually
+// the provider's, so requiring both in every import id would be noise.
+func (r *SwitchPort) importSwitchPort(raw string, diags *diag.Diagnostics) (m switchPortResourceModel, ok bool) {
+	parts := strings.Split(raw, "/")
+	var site, device, key string
+	switch len(parts) {
+	case 1:
+		key = parts[0]
+	case 2:
+		device, key = parts[0], parts[1]
+	case 3:
+		site, device, key = parts[0], parts[1], parts[2]
+	default:
+		diags.AddError("Invalid import id", "Use "+switchPortImportForms+" to import a port.")
+		return m, false
+	}
+	number, err := strconv.ParseInt(key, 10, 64)
+	if err != nil {
+		diags.AddError("Invalid import id",
+			fmt.Sprintf("%q is not a port number. Use %s, e.g. 3.", key, switchPortImportForms))
+		return m, false
+	}
+	return r.resolve(switchPortResourceModel{
+		SiteID:   types.StringValue(site),
+		DeviceID: types.StringValue(device),
+		Port:     types.Int64Value(number),
+	}, diags)
+}
+
+// resolve fills in the identities the provider supplies and the id that follows from them,
+// so state records the port a change landed on rather than what the configuration left out.
+// A port is a piece of hardware, so a device that resolves to nothing is refused here
+// rather than quietly writing the site's configuration and touching no port at all.
+func (r *SwitchPort) resolve(m switchPortResourceModel, diags *diag.Diagnostics) (switchPortResourceModel, bool) {
+	site, err := r.site(m.SiteID)
+	if err != nil {
+		diags.AddError("No site for this switch port", err.Error())
+		return m, false
+	}
+	device, err := r.device(m.DeviceID)
+	if err != nil {
+		diags.AddError("No device for this switch port", err.Error())
+		return m, false
+	}
+	m.SiteID, m.DeviceID = types.StringValue(site), types.StringValue(device)
+	m.ID = m.address()
+	return m, true
+}
+
 func (r *SwitchPort) write(ctx context.Context, plan switchPortResourceModel, state stateSetter, diags *diag.Diagnostics) {
-	plan.ID = plan.address()
-	if err := r.put(ctx, plan.SiteID.ValueString(), plan.DeviceID.ValueString(), plan.switchPort()); err != nil {
+	plan, ok := r.resolve(plan, diags)
+	if !ok {
+		return
+	}
+	if err := r.put(ctx, plan, plan.switchPort()); err != nil {
 		diags.AddError("Writing switch port", err.Error())
 		return
 	}

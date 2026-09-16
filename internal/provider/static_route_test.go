@@ -18,7 +18,6 @@ func staticRouteConfig(network string) string {
 	return providerBlock(false) + fmt.Sprintf(`
 resource "alta_static_route" "vpnret" {
   site_id   = %q
-  device_id = %q
   id        = %q
 
   name     = "Return path"
@@ -26,7 +25,7 @@ resource "alta_static_route" "vpnret" {
   network  = %q
   next_hop = "192.0.2.10"
 }
-`, cloudtest.SiteID, cloudtest.DeviceID, routeID, network)
+`, cloudtest.SiteID, routeID, network)
 }
 
 // TestStaticRouteLifecycle covers the loop the whole provider is judged on: create,
@@ -62,7 +61,7 @@ func TestStaticRouteLifecycle(t *testing.T) {
 			{
 				ResourceName:      name,
 				ImportState:       true,
-				ImportStateId:     cloudtest.SiteID + "/" + cloudtest.DeviceID + "/vpnret",
+				ImportStateId:     cloudtest.SiteID + "/" + routeID,
 				ImportStateVerify: true,
 			},
 		},

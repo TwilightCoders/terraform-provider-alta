@@ -50,6 +50,27 @@
       "path": "/api/client/edit",
       "token": "body",
       "semantics": "Sets client record fields flat, e.g. {siteid, id, ip, vlan}. Stored back under the record's config object."
+    },
+    {
+      "name": "wifi_ssid_list",
+      "method": "POST",
+      "path": "/api/wifi/ssid/list",
+      "token": "header",
+      "semantics": "Lists a site's wireless networks. Not yet exercised: an SSID is its own object with its own create, edit and delete endpoints, so unlike the site document's collections it is not written by whole-key replacement."
+    },
+    {
+      "name": "wifi_ssid",
+      "method": "POST",
+      "path": "/api/wifi/ssid",
+      "token": "header",
+      "semantics": "Creates or edits one wireless network, as {token, config}. Not yet exercised. The portal sends the whole object and explicitly nulls every field left unset, so a partial write is a replacement rather than a merge."
+    },
+    {
+      "name": "wifi_ssid_delete",
+      "method": "POST",
+      "path": "/api/wifi/ssid/delete",
+      "token": "header",
+      "semantics": "Deletes one wireless network. Not yet exercised."
     }
   ],
   "objects": {
@@ -313,6 +334,152 @@
         },
         "routerIP": {
           "type": "string",
+          "optional": true
+        }
+      }
+    },
+    "wireless_network": {
+      "source": "endpoint:wifi_ssid",
+      "unobserved": true,
+      "fields": {
+        "acl": {
+          "type": "unknown",
+          "optional": true
+        },
+        "aclList": {
+          "type": "unknown",
+          "optional": true
+        },
+        "bandbits": {
+          "type": "unknown",
+          "optional": true
+        },
+        "bands": {
+          "type": "unknown",
+          "optional": true
+        },
+        "colors": {
+          "type": "unknown",
+          "optional": true
+        },
+        "dtim2": {
+          "type": "unknown",
+          "optional": true
+        },
+        "dtim5": {
+          "type": "unknown",
+          "optional": true
+        },
+        "fastRoaming": {
+          "type": "unknown",
+          "optional": true
+        },
+        "force6ghz": {
+          "type": "unknown",
+          "optional": true
+        },
+        "hidden": {
+          "type": "unknown",
+          "optional": true
+        },
+        "hotspot": {
+          "type": "unknown",
+          "optional": true
+        },
+        "hotspotPassword": {
+          "type": "unknown",
+          "optional": true
+        },
+        "hotspotTerms": {
+          "type": "unknown",
+          "optional": true
+        },
+        "hotspotTitle": {
+          "type": "unknown",
+          "optional": true
+        },
+        "hotspotType": {
+          "type": "unknown",
+          "optional": true
+        },
+        "id": {
+          "type": "unknown",
+          "optional": true
+        },
+        "igmp": {
+          "type": "unknown",
+          "optional": true
+        },
+        "mlo": {
+          "type": "unknown",
+          "optional": true
+        },
+        "nasId": {
+          "type": "unknown",
+          "optional": true
+        },
+        "nasIdType": {
+          "type": "unknown",
+          "optional": true
+        },
+        "network": {
+          "type": "unknown",
+          "optional": true
+        },
+        "notes": {
+          "type": "unknown",
+          "optional": true
+        },
+        "passwords": {
+          "type": "unknown",
+          "optional": true
+        },
+        "pmf": {
+          "type": "unknown",
+          "optional": true
+        },
+        "pskOffload": {
+          "type": "unknown",
+          "optional": true
+        },
+        "radiusAcctPort": {
+          "type": "unknown",
+          "optional": true
+        },
+        "radiusAuthPort": {
+          "type": "unknown",
+          "optional": true
+        },
+        "radiusIp": {
+          "type": "unknown",
+          "optional": true
+        },
+        "radiusSecret": {
+          "type": "unknown",
+          "optional": true
+        },
+        "security": {
+          "type": "unknown",
+          "optional": true
+        },
+        "ssid": {
+          "type": "unknown",
+          "optional": true
+        },
+        "ssidSites": {
+          "type": "unknown",
+          "optional": true
+        },
+        "type": {
+          "type": "unknown",
+          "optional": true
+        },
+        "vouchers": {
+          "type": "unknown",
+          "optional": true
+        },
+        "wpa3": {
+          "type": "unknown",
           "optional": true
         }
       }

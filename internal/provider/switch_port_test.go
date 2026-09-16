@@ -7,11 +7,14 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 )
 
@@ -30,6 +33,56 @@ resource "alta_switch_port" "uplink" {
   tagged_vlans = %s
 }
 `, cloudtest.SiteID, cloudtest.DeviceID, tagged)
+}
+
+// switchPortProviderBlock names the identities on the provider, which is where a
+// configuration that manages one router puts them. An empty device leaves device_id out,
+// so a port has nowhere to resolve one from.
+func switchPortProviderBlock(deviceID string) string {
+	device := ""
+	if deviceID != "" {
+		device = fmt.Sprintf("  device_id = %q\n", deviceID)
+	}
+	return fmt.Sprintf(`
+provider "alta" {
+  email     = "test"
+  password  = "test"
+  read_only = false
+  site_id   = %q
+%s  ssh = {
+    host                 = "192.0.2.1"
+    host_key_fingerprint = "SHA256:test"
+  }
+}
+`, cloudtest.SiteID, device)
+}
+
+// switchPortDefaultedConfig is switchPortConfig with no identity on the resource: both the
+// site and the device come from the provider.
+func switchPortDefaultedConfig(deviceID string) string {
+	return switchPortProviderBlock(deviceID) + `
+resource "alta_switch_port" "uplink" {
+  port = 3
+
+  native_vlan  = 2
+  tagged_vlans = [20]
+}
+`
+}
+
+// switchPortScopedFactories carries the provider's own identities into ProviderData, which
+// the shared harness leaves out.
+func (h *harness) switchPortScopedFactories() map[string]func() (tfprotov6.ProviderServer, error) {
+	return map[string]func() (tfprotov6.ProviderServer, error){
+		"alta": providerserver.NewProtocol6WithError(&Provider{version: "test", build: func(s Settings) (*resources.ProviderData, error) {
+			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID}
+			if s.SSH != nil {
+				data.Transactions = h.tx
+				data.Hooks = h.hooks
+			}
+			return data, nil
+		}}),
+	}
 }
 
 // TestSwitchPortLifecycle covers create, refresh clean, change, import and destroy. The
@@ -93,6 +146,50 @@ func TestSwitchPortLeavesTheRestOfTheSwitchAlone(t *testing.T) {
 			),
 		}},
 		CheckDestroy: untouched,
+	})
+}
+
+// TestSwitchPortDefaultsToTheProvidersDevice is the point of an optional device_id: a
+// configuration that manages one router names the site and the device once, on the
+// provider. The import id is the port number alone for the same reason.
+func TestSwitchPortDefaultsToTheProvidersDevice(t *testing.T) {
+	h := newHarness(t)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: h.switchPortScopedFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: switchPortDefaultedConfig(cloudtest.DeviceID),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(switchPortName, "site_id", cloudtest.SiteID),
+					resource.TestCheckResourceAttr(switchPortName, "device_id", cloudtest.DeviceID),
+					resource.TestCheckResourceAttr(switchPortName, "id", cloudtest.SiteID+"/"+cloudtest.DeviceID+"/3"),
+					h.expectPort(routerconfig.SwitchPort{Port: 3, NativeVLAN: vlan(2), TaggedVLANs: []int64{20}}),
+				),
+			},
+			{Config: switchPortDefaultedConfig(cloudtest.DeviceID), PlanOnly: true},
+			{
+				ResourceName:      switchPortName,
+				ImportState:       true,
+				ImportStateId:     "3",
+				ImportStateVerify: true,
+			},
+		},
+		CheckDestroy: h.expectPort(routerconfig.SwitchPort{Port: 3, NativeVLAN: vlan(2), TaggedVLANs: []int64{20}}),
+	})
+}
+
+// TestSwitchPortWithoutADeviceSaysSo is the failure a site-scoped resource cannot have: a
+// port is a piece of hardware, so with no device on either the resource or the provider
+// there is nothing to configure, and the refusal has to say where to put one.
+func TestSwitchPortWithoutADeviceSaysSo(t *testing.T) {
+	h := newHarness(t)
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: h.switchPortScopedFactories(),
+		Steps: []resource.TestStep{{
+			Config:      switchPortDefaultedConfig(""),
+			ExpectError: regexp.MustCompile(`No device for this switch port`),
+		}},
 	})
 }
 

@@ -34,6 +34,13 @@ type collection[T any] struct {
 	id    func(T) string
 }
 
+// scoped is the identity a single-item resource's model carries. Most resources belong to
+// a site alone and return a null device.
+type scoped interface {
+	siteRef() types.String
+	deviceRef() types.String
+}
+
 // element applies one item of a collection as a gated transaction.
 //
 // Read-modify-write of a shared array is only safe one at a time, so every apply holds
@@ -45,10 +52,17 @@ type element[T any] struct {
 	in   collection[T]
 }
 
-func (e element[T]) document(ctx context.Context, siteID, deviceID string) (*routerconfig.Document, error) {
+// document reads the site the model belongs to, resolving both identities against the
+// provider's defaults.
+func (e element[T]) document(ctx context.Context, m scoped) (*routerconfig.Document, error) {
 	if e.data == nil {
 		return nil, errors.New("provider is not configured")
 	}
+	siteID, err := e.site(m.siteRef())
+	if err != nil {
+		return nil, err
+	}
+	deviceID := e.deviceOrNone(m.deviceRef())
 	site, err := e.data.Cloud.Site(ctx, siteID)
 	if err != nil {
 		return nil, err
@@ -72,9 +86,9 @@ func (e element[T]) find(doc *routerconfig.Document, id string) (T, bool) {
 }
 
 // put writes item into the collection, replacing any item with the same id.
-func (e element[T]) put(ctx context.Context, siteID, deviceID string, item T) error {
+func (e element[T]) put(ctx context.Context, m scoped, item T) error {
 	id := e.in.id(item)
-	return e.apply(ctx, siteID, deviceID, func(items []T) []T {
+	return e.apply(ctx, m, func(items []T) []T {
 		for i, existing := range items {
 			if e.in.id(existing) == id {
 				items[i] = item
@@ -86,8 +100,8 @@ func (e element[T]) put(ctx context.Context, siteID, deviceID string, item T) er
 }
 
 // drop removes the item with this id, leaving every other item alone.
-func (e element[T]) drop(ctx context.Context, siteID, deviceID, id string) error {
-	return e.apply(ctx, siteID, deviceID, func(items []T) []T {
+func (e element[T]) drop(ctx context.Context, m scoped, id string) error {
+	return e.apply(ctx, m, func(items []T) []T {
 		kept := make([]T, 0, len(items))
 		for _, item := range items {
 			if e.in.id(item) != id {
@@ -99,11 +113,11 @@ func (e element[T]) drop(ctx context.Context, siteID, deviceID, id string) error
 }
 
 // apply runs change against the collection as one gated transaction.
-func (e element[T]) apply(ctx context.Context, siteID, deviceID string, change func([]T) []T) error {
+func (e element[T]) apply(ctx context.Context, m scoped, change func([]T) []T) error {
 	e.data.applying.Lock()
 	defer e.data.applying.Unlock()
 
-	doc, err := e.document(ctx, siteID, deviceID)
+	doc, err := e.document(ctx, m)
 	if err != nil {
 		return err
 	}
@@ -171,6 +185,28 @@ func (e element[T]) planGeneratedID(ctx context.Context, req resource.ModifyPlan
 	if id.IsUnknown() {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, idPath, types.StringValue(newAltaID()))...)
 	}
+	e.planDefaults(ctx, resp)
+}
+
+// planDefaults fills the identities the provider supplies, so a plan shows the site and
+// device a change lands on rather than "known after apply".
+func (e element[T]) planDefaults(ctx context.Context, resp *resource.ModifyPlanResponse) {
+	if e.data == nil {
+		return
+	}
+	for attribute, fallback := range map[string]string{"site_id": e.data.SiteID, "device_id": e.data.DeviceID} {
+		attr, declared := resp.Plan.Schema.GetAttributes()[attribute]
+		if fallback == "" || !declared || !attr.IsComputed() {
+			continue
+		}
+		var current types.String
+		if resp.Diagnostics.Append(resp.Plan.GetAttribute(ctx, path.Root(attribute), &current)...); resp.Diagnostics.HasError() {
+			return
+		}
+		if current.IsUnknown() || current.ValueString() == "" {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root(attribute), types.StringValue(fallback))...)
+		}
+	}
 }
 
 // generatedID returns the planned id, or a new one when the plan left it unset.
@@ -181,17 +217,13 @@ func generatedID(id types.String) types.String {
 	return id
 }
 
-// siteAttributes are the attributes every single-item resource carries.
+// siteAttributes are what every single-item resource carries. Both identities default to
+// the provider's, so a configuration that manages one site never repeats it.
 func siteAttributes(idDescription string) map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"site_id": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Alta site id.",
-			PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
-		},
-		"device_id": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Router device id: its MAC address, lowercase without separators.",
+			Optional: true, Computed: true,
+			MarkdownDescription: "Alta site. Defaults to the provider's `site_id`.",
 			PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
 		},
 		"id": schema.StringAttribute{
@@ -200,6 +232,54 @@ func siteAttributes(idDescription string) map[string]schema.Attribute {
 			PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace(), stringplanmodifier.UseStateForUnknown()},
 		},
 	}
+}
+
+// deviceAttribute belongs only to resources that configure a piece of hardware. Most of a
+// site's configuration is the site's, and asking those resources for a device only creates
+// a way to name the wrong one.
+func deviceAttribute() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"device_id": schema.StringAttribute{
+			Optional: true, Computed: true,
+			MarkdownDescription: "Router this belongs to — its MAC address, lowercase without separators. " +
+				"Defaults to the provider's `device_id`.",
+			PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+		},
+	}
+}
+
+// site resolves the site this item belongs to: the resource's own, or the provider's.
+func (e element[T]) site(named types.String) (string, error) {
+	if id := named.ValueString(); id != "" {
+		return id, nil
+	}
+	if e.data == nil || e.data.SiteID == "" {
+		return "", fmt.Errorf("no site: set site_id on this %s or on the provider", e.in.label)
+	}
+	return e.data.SiteID, nil
+}
+
+// deviceOrNone resolves the hardware an item belongs to, or nothing: a site-scoped
+// resource has no device and needs none.
+func (e element[T]) deviceOrNone(named types.String) string {
+	if id := named.ValueString(); id != "" {
+		return id
+	}
+	if e.data == nil {
+		return ""
+	}
+	return e.data.DeviceID
+}
+
+// device resolves the hardware this item belongs to, for the resources that need one.
+func (e element[T]) device(named types.String) (string, error) {
+	if id := named.ValueString(); id != "" {
+		return id, nil
+	}
+	if e.data == nil || e.data.DeviceID == "" {
+		return "", fmt.Errorf("no device: set device_id on this %s or on the provider", e.in.label)
+	}
+	return e.data.DeviceID, nil
 }
 
 // with adds attributes to a base set, so the shared ones are declared once.
@@ -226,13 +306,31 @@ func newAltaID() string {
 	return string(buf)
 }
 
-// importParts splits "<site_id>/<device_id>/<id>", the import form of a single item.
-func importParts(id string, diags *diag.Diagnostics, label string) (site, device, item string, ok bool) {
-	parts := strings.SplitN(id, "/", 3)
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+// siteScopedImport reads "<id>" or "<site_id>/<id>". The site is usually the provider's,
+// so requiring it in every import id would be noise.
+func (e element[T]) siteScopedImport(raw string, diags *diag.Diagnostics) (site, id string, ok bool) {
+	parts := strings.Split(raw, "/")
+	switch len(parts) {
+	case 1:
+		id = parts[0]
+	case 2:
+		site, id = parts[0], parts[1]
+	default:
 		diags.AddError("Invalid import id",
-			fmt.Sprintf("Use <site_id>/<device_id>/<%s id> to import a %s.", label, label))
-		return "", "", "", false
+			fmt.Sprintf("Use <%s id>, or <site_id>/<%s id> to name a site other than the provider's.", e.in.label, e.in.label))
+		return "", "", false
 	}
-	return parts[0], parts[1], parts[2], true
+	if id == "" {
+		diags.AddError("Invalid import id", fmt.Sprintf("Name the %s to import.", e.in.label))
+		return "", "", false
+	}
+	if site == "" {
+		resolved, err := e.site(types.StringNull())
+		if err != nil {
+			diags.AddError("Invalid import id", err.Error())
+			return "", "", false
+		}
+		site = resolved
+	}
+	return site, id, true
 }

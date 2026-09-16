@@ -8,11 +8,14 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
+	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 )
 
@@ -22,9 +25,8 @@ var fixtureVLANs = []int64{1, 2, 3, 20}
 func vlanConfig(routerIP string) string {
 	return providerBlock(false) + fmt.Sprintf(`
 resource "alta_vlan" "lab" {
-  site_id   = %q
-  device_id = %q
-  vlan_id   = 40
+  site_id = %q
+  vlan_id = 40
 
   name         = "Lab"
   router_ip    = %q
@@ -32,7 +34,55 @@ resource "alta_vlan" "lab" {
   reserved_ips = 10
   dns_servers  = ["192.0.2.10"]
 }
-`, cloudtest.SiteID, cloudtest.DeviceID, routerIP)
+`, cloudtest.SiteID, routerIP)
+}
+
+// vlanProviderBlock names the site on the provider, which is where a configuration that
+// manages one site puts it.
+func vlanProviderBlock() string {
+	return fmt.Sprintf(`
+provider "alta" {
+  email     = "test"
+  password  = "test"
+  read_only = false
+  site_id   = %q
+  ssh = {
+    host                 = "192.0.2.1"
+    host_key_fingerprint = "SHA256:test"
+  }
+}
+`, cloudtest.SiteID)
+}
+
+// vlanDefaultedConfig is vlanConfig with no identity at all: the site comes from the
+// provider, and a network needs no device.
+func vlanDefaultedConfig() string {
+	return vlanProviderBlock() + `
+resource "alta_vlan" "lab" {
+  vlan_id = 40
+
+  name         = "Lab"
+  router_ip    = "198.18.40.1/24"
+  pool_size    = 100
+  reserved_ips = 10
+  dns_servers  = ["192.0.2.10"]
+}
+`
+}
+
+// vlanScopedFactories carries the provider's own identities into ProviderData, which the
+// shared harness leaves out.
+func (h *harness) vlanScopedFactories() map[string]func() (tfprotov6.ProviderServer, error) {
+	return map[string]func() (tfprotov6.ProviderServer, error){
+		"alta": providerserver.NewProtocol6WithError(&Provider{version: "test", build: func(s Settings) (*resources.ProviderData, error) {
+			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID}
+			if s.SSH != nil {
+				data.Transactions = h.tx
+				data.Hooks = h.hooks
+			}
+			return data, nil
+		}}),
+	}
 }
 
 // TestVLANLifecycle covers the loop the whole provider is judged on: create, refresh
@@ -61,7 +111,7 @@ func TestVLANLifecycle(t *testing.T) {
 			{
 				ResourceName:      name,
 				ImportState:       true,
-				ImportStateId:     cloudtest.SiteID + "/" + cloudtest.DeviceID + "/40",
+				ImportStateId:     cloudtest.SiteID + "/40",
 				ImportStateVerify: true,
 			},
 		},
@@ -93,6 +143,35 @@ func TestVLANLeavesOtherNetworksAlone(t *testing.T) {
 			Check:  h.expectVLANs(append(slices.Clone(kept), 40)...),
 		}},
 		CheckDestroy: h.expectVLANs(kept...),
+	})
+}
+
+// TestVLANDefaultsToTheProvidersSite is the point of an optional site_id: a configuration
+// that manages one site names it once, on the provider, and the resource carries no
+// identity of its own. The import id is the VLAN number alone for the same reason.
+func TestVLANDefaultsToTheProvidersSite(t *testing.T) {
+	h := newHarness(t)
+	const name = "alta_vlan.lab"
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: h.vlanScopedFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: vlanDefaultedConfig(),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "site_id", cloudtest.SiteID),
+					resource.TestCheckResourceAttr(name, "id", "40"),
+					h.expectVLANs(append(slices.Clone(fixtureVLANs), 40)...),
+				),
+			},
+			{Config: vlanDefaultedConfig(), PlanOnly: true},
+			{
+				ResourceName:      name,
+				ImportState:       true,
+				ImportStateId:     "40",
+				ImportStateVerify: true,
+			},
+		},
 	})
 }
 

@@ -159,10 +159,17 @@ func keys(m map[string]bool) []string {
 
 // instances resolves a source path such as "site:firewall.nat.rules[]",
 // "device:portsCfg.ports{}" or "client:config" to the objects it selects.
+//
+// "endpoint:<name>" selects nothing here: some objects are not part of a captured
+// document but have endpoints of their own, and until one of those is captured the
+// declared fields are all the evidence there is.
 func (c Capture) instances(source string) ([]map[string]any, error) {
 	root, path, ok := strings.Cut(source, ":")
 	if !ok {
-		return nil, fmt.Errorf("source %q must start with site:, device: or client", source)
+		return nil, fmt.Errorf("source %q must start with a root of site, device, client or endpoint", source)
+	}
+	if root == "endpoint" {
+		return nil, nil
 	}
 	var nodes []any
 	switch root {

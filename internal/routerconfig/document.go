@@ -26,11 +26,18 @@ type Document struct {
 	Clients map[string]cloud.Object
 }
 
-// NewDocument copies the relevant parts of a site read so the caller's data is never mutated.
+// NewDocument copies the relevant parts of a site read so the caller's data is never
+// mutated. deviceID may be empty: most of a site's configuration belongs to the site
+// rather than to one device, and asking for a device that is not needed only creates a
+// way to be wrong.
 func NewDocument(siteID, deviceID string, site cloud.Object, state cloud.State) (*Document, error) {
-	device, ok := state.Device(deviceID)
-	if !ok {
-		return nil, fmt.Errorf("device %q is not part of site %q", deviceID, siteID)
+	var device cloud.Object
+	if deviceID != "" {
+		found, ok := state.Device(deviceID)
+		if !ok {
+			return nil, fmt.Errorf("device %q is not part of site %q", deviceID, siteID)
+		}
+		device = found
 	}
 	clients := make(map[string]cloud.Object, len(state.Clients))
 	for _, c := range state.Clients {

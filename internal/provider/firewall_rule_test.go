@@ -41,9 +41,8 @@ const firewallRuleID = "VpnAcc"
 func firewallRuleConfig(port string) string {
 	return providerBlock(false) + fmt.Sprintf(`
 resource "alta_firewall_rule" "vpn" {
-  site_id   = %q
-  device_id = %q
-  id        = %q
+  site_id = %q
+  id      = %q
 
   description = "Allow WireGuard"
   action      = "ACCEPT"
@@ -52,7 +51,7 @@ resource "alta_firewall_rule" "vpn" {
   zone_in     = "wan"
   destination = { port = %q }
 }
-`, cloudtest.SiteID, cloudtest.DeviceID, firewallRuleID, port)
+`, cloudtest.SiteID, firewallRuleID, port)
 }
 
 // TestFirewallRuleLifecycle covers the loop the whole provider is judged on: create,
@@ -89,7 +88,7 @@ func TestFirewallRuleLifecycle(t *testing.T) {
 			{
 				ResourceName:      name,
 				ImportState:       true,
-				ImportStateId:     cloudtest.SiteID + "/" + cloudtest.DeviceID + "/" + firewallRuleID,
+				ImportStateId:     cloudtest.SiteID + "/" + firewallRuleID,
 				ImportStateVerify: true,
 			},
 		},
@@ -138,9 +137,8 @@ func TestFirewallRuleLeavesOtherRulesAlone(t *testing.T) {
 func firewallRulePairConfig(guestAction string) string {
 	return providerBlock(false) + fmt.Sprintf(`
 resource "alta_firewall_rule" "vpn" {
-  site_id   = %[1]q
-  device_id = %[2]q
-  id        = %[4]q
+  site_id = %[1]q
+  id      = %[3]q
 
   description = "Allow WireGuard"
   action      = "ACCEPT"
@@ -151,17 +149,16 @@ resource "alta_firewall_rule" "vpn" {
 }
 
 resource "alta_firewall_rule" "guest" {
-  site_id   = %[1]q
-  device_id = %[2]q
-  id        = "GstDrp"
+  site_id = %[1]q
+  id      = "GstDrp"
 
   description = "Guest to LAN"
-  action      = %[3]q
+  action      = %[2]q
   zone_in     = "v1zone"
   zone_out    = "lan"
   destination = { address = "192.0.2.0/24" }
 }
-`, cloudtest.SiteID, cloudtest.DeviceID, guestAction, firewallRuleID)
+`, cloudtest.SiteID, guestAction, firewallRuleID)
 }
 
 // TestFirewallRuleKeepsEvaluationOrder is the risk a per-item resource carries on an
@@ -203,6 +200,56 @@ func TestFirewallRuleKeepsEvaluationOrder(t *testing.T) {
 				Check: func(*terraform.State) error {
 					return sameIDs(h.firewallRuleIDs, afterCreate)
 				},
+			},
+		},
+	})
+}
+
+// TestFirewallRuleDefaultsToTheProviderSite is the short form the identities exist for: the
+// site is named once on the provider, and a rule that says nothing about where it belongs
+// lands there anyway, with the site in its state rather than "known after apply".
+func TestFirewallRuleDefaultsToTheProviderSite(t *testing.T) {
+	h := newHarness(t)
+	const name = "alta_firewall_rule.vpn"
+	config := providerBlockWithSite(false) + fmt.Sprintf(`
+resource "alta_firewall_rule" "vpn" {
+  id = %q
+
+  description = "Allow WireGuard"
+  action      = "ACCEPT"
+  protocols   = ["udp"]
+  ip_version  = "ipv4"
+  zone_in     = "wan"
+  destination = { port = "51820" }
+}
+`, firewallRuleID)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: h.defaultingFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "site_id", cloudtest.SiteID),
+					func(*terraform.State) error {
+						rules, err := h.firewallRules()
+						if err != nil {
+							return err
+						}
+						last := rules[len(rules)-1]
+						if last.ID != firewallRuleID {
+							return fmt.Errorf("cloud rules = %+v", rules)
+						}
+						return nil
+					},
+				),
+			},
+			{Config: config, PlanOnly: true},
+			{
+				ResourceName:      name,
+				ImportState:       true,
+				ImportStateId:     firewallRuleID,
+				ImportStateVerify: true,
 			},
 		},
 	})

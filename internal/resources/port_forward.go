@@ -38,7 +38,6 @@ var portForwardCollection = collection[routerconfig.PortForward]{
 // reflection has no notion of embedded structs, so the fields are repeated.
 type portForwardResourceModel struct {
 	SiteID      types.String   `tfsdk:"site_id"`
-	DeviceID    types.String   `tfsdk:"device_id"`
 	ID          types.String   `tfsdk:"id"`
 	Description types.String   `tfsdk:"description"`
 	Protocols   []string       `tfsdk:"protocols"`
@@ -49,6 +48,11 @@ type portForwardResourceModel struct {
 	Destination *endpointModel `tfsdk:"destination"`
 	Translation *endpointModel `tfsdk:"translation"`
 }
+
+func (m portForwardResourceModel) siteRef() types.String { return m.SiteID }
+
+// deviceRef is null: a NAT rule belongs to the site, not to one of its devices.
+func (m portForwardResourceModel) deviceRef() types.String { return types.StringNull() }
 
 func (m portForwardResourceModel) forward() routerconfig.PortForward {
 	return routerconfig.PortForward{
@@ -112,7 +116,7 @@ func (r *PortForward) Read(ctx context.Context, req resource.ReadRequest, resp *
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	doc, err := r.document(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString())
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading port forward", err.Error())
 		return
@@ -130,18 +134,19 @@ func (r *PortForward) Delete(ctx context.Context, req resource.DeleteRequest, re
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.drop(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString(), state.ID.ValueString()); err != nil {
+	if err := r.drop(ctx, state, state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Removing port forward", err.Error())
 	}
 }
 
 // ImportState adopts a forward the portal already holds.
 func (r *PortForward) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	site, device, id, ok := importParts(req.ID, &resp.Diagnostics, "port forward")
+	site, id, ok := r.siteScopedImport(req.ID, &resp.Diagnostics)
 	if !ok {
 		return
 	}
-	doc, err := r.document(ctx, site, device)
+	state := portForwardResourceModel{SiteID: types.StringValue(site), ID: types.StringValue(id)}
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading port forward", err.Error())
 		return
@@ -151,15 +156,11 @@ func (r *PortForward) ImportState(ctx context.Context, req resource.ImportStateR
 		resp.Diagnostics.AddError("No such port forward", "The site has no NAT rule with id "+id+".")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, portForwardResourceModel{
-		SiteID:   types.StringValue(site),
-		DeviceID: types.StringValue(device),
-		ID:       types.StringValue(id),
-	}.withForward(forward))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state.withForward(forward))...)
 }
 
 func (r *PortForward) write(ctx context.Context, plan portForwardResourceModel, state stateSetter, diags *diag.Diagnostics) {
-	if err := r.put(ctx, plan.SiteID.ValueString(), plan.DeviceID.ValueString(), plan.forward()); err != nil {
+	if err := r.put(ctx, plan, plan.forward()); err != nil {
 		diags.AddError("Writing port forward", err.Error())
 		return
 	}

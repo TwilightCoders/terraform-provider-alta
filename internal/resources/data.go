@@ -54,6 +54,9 @@ type ProviderData struct {
 	Hooks DeviceHooks
 	// ReadOnly refuses every change, for importing and planning against production.
 	ReadOnly bool
+	// SiteID and DeviceID are the provider's defaults, used by any resource that does not
+	// name its own. Configuration belongs to a site far more often than to one device.
+	SiteID, DeviceID string
 }
 
 // providerData extracts ProviderData from a Configure request.

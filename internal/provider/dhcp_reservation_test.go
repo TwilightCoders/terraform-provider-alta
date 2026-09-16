@@ -32,43 +32,41 @@ const vlanClient = "02:00:00:00:00:1b"
 func dhcpReservationConfig(mac, ip string) string {
 	return providerBlock(false) + fmt.Sprintf(`
 resource "alta_dhcp_reservation" "printer" {
-  site_id   = %q
-  device_id = %q
+  site_id = %q
 
   mac = %q
   ip  = %q
 }
-`, cloudtest.SiteID, cloudtest.DeviceID, mac, ip)
+`, cloudtest.SiteID, mac, ip)
 }
 
 // TestDHCPReservationLifecycle covers create, refresh clean, change, import and destroy
 // for a client the site has never seen, which the cloud has to be given a record for.
 func TestDHCPReservationLifecycle(t *testing.T) {
 	h := newHarness(t)
-	const mac = "02:00:00:aa:bb:cc"
 
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{
 			{
-				Config: dhcpReservationConfig(mac, "192.0.2.40"),
+				Config: dhcpReservationConfig(reservedMAC, "192.0.2.40"),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(dhcpReservationName, "id", cloudtest.SiteID+"/"+cloudtest.DeviceID+"/"+mac),
-					h.expectReservations(alsoReserved(mac, "192.0.2.40")),
+					resource.TestCheckResourceAttr(dhcpReservationName, "id", cloudtest.SiteID+"/"+reservedMAC),
+					h.expectReservations(alsoReserved("192.0.2.40")),
 				),
 			},
-			{Config: dhcpReservationConfig(mac, "192.0.2.40"), PlanOnly: true},
+			{Config: dhcpReservationConfig(reservedMAC, "192.0.2.40"), PlanOnly: true},
 			{
-				Config: dhcpReservationConfig(mac, "192.0.2.41"),
+				Config: dhcpReservationConfig(reservedMAC, "192.0.2.41"),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dhcpReservationName, "ip", "192.0.2.41"),
-					h.expectReservations(alsoReserved(mac, "192.0.2.41")),
+					h.expectReservations(alsoReserved("192.0.2.41")),
 				),
 			},
 			{
 				ResourceName:      dhcpReservationName,
 				ImportState:       true,
-				ImportStateId:     cloudtest.SiteID + "/" + cloudtest.DeviceID + "/" + mac,
+				ImportStateId:     cloudtest.SiteID + "/" + reservedMAC,
 				ImportStateVerify: true,
 			},
 		},
@@ -83,13 +81,12 @@ func TestDHCPReservationLifecycle(t *testing.T) {
 // client at once, so the ones Terraform does not own must survive create and destroy.
 func TestDHCPReservationLeavesOtherReservationsAlone(t *testing.T) {
 	h := newHarness(t)
-	const mac = "02:00:00:aa:bb:cc"
 
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{{
-			Config: dhcpReservationConfig(mac, "192.0.2.40"),
-			Check:  h.expectReservations(alsoReserved(mac, "192.0.2.40")),
+			Config: dhcpReservationConfig(reservedMAC, "192.0.2.40"),
+			Check:  h.expectReservations(alsoReserved("192.0.2.40")),
 		}},
 		CheckDestroy: h.expectReservations(fixtureReservations),
 	})
@@ -119,6 +116,41 @@ func TestDHCPReservationKeepsTheClientVLAN(t *testing.T) {
 	})
 }
 
+// TestDHCPReservationDefaultsToTheProviderSite is the short form the identities exist for:
+// the site is named once on the provider, and a reservation that says nothing about where
+// the client lives lands there anyway — including in the id, which is built from the site.
+func TestDHCPReservationDefaultsToTheProviderSite(t *testing.T) {
+	h := newHarness(t)
+	config := providerBlockWithSite(false) + fmt.Sprintf(`
+resource "alta_dhcp_reservation" "printer" {
+  mac = %q
+  ip  = "192.0.2.40"
+}
+`, reservedMAC)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: h.defaultingFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(dhcpReservationName, "site_id", cloudtest.SiteID),
+					resource.TestCheckResourceAttr(dhcpReservationName, "id", cloudtest.SiteID+"/"+reservedMAC),
+					h.expectReservations(alsoReserved("192.0.2.40")),
+				),
+			},
+			{Config: config, PlanOnly: true},
+			{
+				ResourceName:      dhcpReservationName,
+				ImportState:       true,
+				ImportStateId:     reservedMAC,
+				ImportStateVerify: true,
+			},
+		},
+		CheckDestroy: h.expectReservations(fixtureReservations),
+	})
+}
+
 func TestDHCPReservationRefusedWhenReadOnly(t *testing.T) {
 	h := newHarness(t)
 	resource.UnitTest(t, resource.TestCase{
@@ -145,10 +177,14 @@ func TestDHCPReservationNeedsACanonicalMAC(t *testing.T) {
 	})
 }
 
-// alsoReserved is the fixture's reservations plus one more.
-func alsoReserved(mac, ip string) map[string]string {
+// reservedMAC is the client these tests own; the fixture reserves others.
+const reservedMAC = "02:00:00:aa:bb:cc"
+
+// alsoReserved is the fixture's reservations plus the one under test, which is what the
+// cloud should hold while this resource exists.
+func alsoReserved(ip string) map[string]string {
 	want := maps.Clone(fixtureReservations)
-	want[mac] = ip
+	want[reservedMAC] = ip
 	return want
 }
 
@@ -171,9 +207,9 @@ func (h *harness) expectReservations(want map[string]string) resource.TestCheckF
 
 // expectClientConfig asserts fields of a raw client record, "" meaning the field is gone.
 // Only the record shows what a write did to the fields this provider does not model.
-func (h *harness) expectClientConfig(mac string, want map[string]string) resource.TestCheckFunc {
+func (h *harness) expectClientConfig(reservedMAC string, want map[string]string) resource.TestCheckFunc {
 	return func(*terraform.State) error {
-		config, err := h.clientConfig(mac)
+		config, err := h.clientConfig(reservedMAC)
 		if err != nil {
 			return err
 		}
@@ -183,7 +219,7 @@ func (h *harness) expectClientConfig(mac string, want map[string]string) resourc
 				got = fmt.Sprint(raw)
 			}
 			if got != value {
-				return fmt.Errorf("client %s config.%s = %q, want %q", mac, key, got, value)
+				return fmt.Errorf("client %s config.%s = %q, want %q", reservedMAC, key, got, value)
 			}
 		}
 		return nil
@@ -199,8 +235,8 @@ func (h *harness) reservations() ([]routerconfig.DHCPReservation, error) {
 	return *c.DHCPReservations, nil
 }
 
-func (h *harness) clientConfig(mac string) (cloud.Object, error) {
-	id, err := routerconfig.ClientID(mac)
+func (h *harness) clientConfig(reservedMAC string) (cloud.Object, error) {
+	id, err := routerconfig.ClientID(reservedMAC)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +246,7 @@ func (h *harness) clientConfig(mac string) (cloud.Object, error) {
 	}
 	record, ok := state.Client(id)
 	if !ok {
-		return nil, fmt.Errorf("the cloud has no client %s", mac)
+		return nil, fmt.Errorf("the cloud has no client %s", reservedMAC)
 	}
 	config, _ := record["config"].(cloud.Object)
 	return config, nil

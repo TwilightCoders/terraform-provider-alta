@@ -39,10 +39,8 @@ resource "alta_static_route" "container_return" {
 
 ### Required
 
-- `device_id` (String) Router device id: its MAC address, lowercase without separators.
 - `name` (String) Name shown in the portal. The portal refuses to save a route without one.
 - `network` (String) Destination CIDR.
-- `site_id` (String) Alta site id.
 - `type` (String) `next-hop`, `interface` or `blackhole`.
 
 ### Optional
@@ -51,3 +49,4 @@ resource "alta_static_route" "container_return" {
 - `interface` (String) Outgoing interface.
 - `metric` (Number) Route metric.
 - `next_hop` (String) Gateway, for `next-hop` routes.
+- `site_id` (String) Alta site. Defaults to the provider's `site_id`.

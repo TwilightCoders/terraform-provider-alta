@@ -22,6 +22,14 @@ terraform {
 
 # Credentials come from ALTA_LABS_EMAIL and ALTA_LABS_PASSWORD.
 provider "alta" {
+  # The site every resource belongs to unless it names another, so it is written once
+  # rather than on every resource. Defaults to ALTA_LABS_SITE_ID.
+  site_id = "aBcDeFgHiJkLmNoPqRsTu"
+
+  # Only resources that configure the hardware itself need a device, such as
+  # alta_switch_port. Defaults to ALTA_LABS_DEVICE_ID.
+  device_id = "0a1b2c3d4e5f"
+
   ssh = {
     host                 = "192.0.2.1"
     host_key_fingerprint = "SHA256:AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefg" # ssh-keyscan 192.0.2.1 | ssh-keygen -lf -
@@ -40,10 +48,12 @@ provider "alta" {
 
 ### Optional
 
+- `device_id` (String) Router this site's device-scoped resources belong to — its MAC address, lowercase without separators. Defaults to `$ALTA_LABS_DEVICE_ID`. Only resources that configure the hardware itself, such as `alta_switch_port`, need one.
 - `email` (String) Alta account email. Defaults to `$ALTA_LABS_EMAIL`. The account must not require MFA.
 - `password` (String, Sensitive) Alta account password. Defaults to `$ALTA_LABS_PASSWORD`.
 - `probes` (Attributes) What healthy looks like from the router. A probe that passed before a change must pass after it. (see [below for nested schema](#nestedatt--probes))
 - `read_only` (Boolean) Refuse any plan that would write to the Alta cloud. Use it to import and plan against a production router with a guarantee of no changes.
+- `site_id` (String) Alta site every resource belongs to unless it names another. Defaults to `$ALTA_LABS_SITE_ID`. Almost all configuration belongs to a site rather than to one device, so setting it here keeps it off every resource.
 - `ssh` (Attributes) Connection to the router, required for changes: it pauses the router's cloud agent, verifies the push and rolls it back if health probes fail. (see [below for nested schema](#nestedatt--ssh))
 - `transaction` (Attributes) Timing of the commit-confirmed transaction. (see [below for nested schema](#nestedatt--transaction))
 

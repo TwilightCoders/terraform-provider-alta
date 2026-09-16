@@ -45,17 +45,21 @@ var dhcpReservationCollection = collection[routerconfig.DHCPReservation]{
 }
 
 // dhcpReservationID is the description of id and the format it is built from.
-const dhcpReservationID = "`<site_id>/<device_id>/<mac>`."
+const dhcpReservationID = "`<site_id>/<mac>`."
 
 // dhcpReservationResourceModel is the Terraform state of one reservation. The framework's
 // reflection has no notion of embedded structs, so the shared attributes are repeated here.
 type dhcpReservationResourceModel struct {
-	SiteID   types.String `tfsdk:"site_id"`
-	DeviceID types.String `tfsdk:"device_id"`
-	ID       types.String `tfsdk:"id"`
-	MAC      types.String `tfsdk:"mac"`
-	IP       types.String `tfsdk:"ip"`
+	SiteID types.String `tfsdk:"site_id"`
+	ID     types.String `tfsdk:"id"`
+	MAC    types.String `tfsdk:"mac"`
+	IP     types.String `tfsdk:"ip"`
 }
+
+func (m dhcpReservationResourceModel) siteRef() types.String { return m.SiteID }
+
+// deviceRef is null: a client's fixed address belongs to the site, not to one of its devices.
+func (m dhcpReservationResourceModel) deviceRef() types.String { return types.StringNull() }
 
 func (m dhcpReservationResourceModel) reservation() routerconfig.DHCPReservation {
 	return routerconfig.DHCPReservation{MAC: m.MAC.ValueString(), IP: m.IP.ValueString()}
@@ -68,7 +72,7 @@ func (m dhcpReservationResourceModel) withReservation(r routerconfig.DHCPReserva
 }
 
 func (m dhcpReservationResourceModel) address() types.String {
-	return types.StringValue(m.SiteID.ValueString() + "/" + m.DeviceID.ValueString() + "/" + m.MAC.ValueString())
+	return types.StringValue(m.SiteID.ValueString() + "/" + m.MAC.ValueString())
 }
 
 func (r *DHCPReservation) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -121,13 +125,18 @@ func (r *DHCPReservation) ModifyPlan(ctx context.Context, req resource.ModifyPla
 	if req.Plan.Raw.IsNull() || resp.Diagnostics.HasError() {
 		return
 	}
+	// The id is built from the site, so the site the provider supplies has to be in the plan
+	// before the id can be resolved.
+	r.planDefaults(ctx, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	// The id is derived, so resolving it here keeps the plan concrete rather than leaving
 	// every create showing "known after apply".
 	var model dhcpReservationResourceModel
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("site_id"), &model.SiteID)...)
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("device_id"), &model.DeviceID)...)
-	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("mac"), &model.MAC)...)
-	if resp.Diagnostics.HasError() || model.SiteID.IsUnknown() || model.DeviceID.IsUnknown() || model.MAC.IsUnknown() {
+	resp.Diagnostics.Append(resp.Plan.GetAttribute(ctx, path.Root("site_id"), &model.SiteID)...)
+	resp.Diagnostics.Append(resp.Plan.GetAttribute(ctx, path.Root("mac"), &model.MAC)...)
+	if resp.Diagnostics.HasError() || model.SiteID.IsUnknown() || model.MAC.IsUnknown() {
 		return // Create resolves it instead, once the identity is known
 	}
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, idPath, model.address())...)
@@ -154,7 +163,7 @@ func (r *DHCPReservation) Read(ctx context.Context, req resource.ReadRequest, re
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	doc, err := r.document(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString())
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading DHCP reservation", err.Error())
 		return
@@ -175,24 +184,26 @@ func (r *DHCPReservation) Delete(ctx context.Context, req resource.DeleteRequest
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.drop(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString(), state.MAC.ValueString()); err != nil {
+	if err := r.drop(ctx, state, state.MAC.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Removing DHCP reservation", err.Error())
 	}
 }
 
 // ImportState adopts a reservation the portal already holds.
 func (r *DHCPReservation) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	site, device, mac, ok := importParts(req.ID, &resp.Diagnostics, "reservation")
+	site, mac, ok := r.siteScopedImport(req.ID, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 	if !macAddress.MatchString(mac) {
 		resp.Diagnostics.AddError("Invalid import id",
-			"Use <site_id>/<device_id>/<mac>, with the MAC address lowercase and colon-separated, e.g. "+
-				site+"/"+device+"/02:00:00:aa:bb:cc.")
+			"Use <mac>, or <site_id>/<mac> to name a site other than the provider's, with the MAC address "+
+				"lowercase and colon-separated, e.g. 02:00:00:aa:bb:cc.")
 		return
 	}
-	doc, err := r.document(ctx, site, device)
+	model := dhcpReservationResourceModel{SiteID: types.StringValue(site), MAC: types.StringValue(mac)}
+	model.ID = model.address()
+	doc, err := r.document(ctx, model)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading DHCP reservation", err.Error())
 		return
@@ -202,18 +213,12 @@ func (r *DHCPReservation) ImportState(ctx context.Context, req resource.ImportSt
 		resp.Diagnostics.AddError("No such reservation", "The site has no client "+mac+" with a fixed address.")
 		return
 	}
-	model := dhcpReservationResourceModel{
-		SiteID:   types.StringValue(site),
-		DeviceID: types.StringValue(device),
-		MAC:      types.StringValue(mac),
-	}
-	model.ID = model.address()
 	resp.Diagnostics.Append(resp.State.Set(ctx, model.withReservation(reservation))...)
 }
 
 func (r *DHCPReservation) write(ctx context.Context, plan dhcpReservationResourceModel, state stateSetter, diags *diag.Diagnostics) {
 	plan.ID = plan.address()
-	if err := r.put(ctx, plan.SiteID.ValueString(), plan.DeviceID.ValueString(), plan.reservation()); err != nil {
+	if err := r.put(ctx, plan, plan.reservation()); err != nil {
 		diags.AddError("Writing DHCP reservation", err.Error())
 		return
 	}

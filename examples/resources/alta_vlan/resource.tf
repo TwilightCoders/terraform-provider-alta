@@ -1,7 +1,6 @@
+# A network belongs to the site, so it takes the provider's site_id and names no device.
 resource "alta_vlan" "iot" {
-  site_id   = "aBcDeFgHiJkLmNoPqRsTu"
-  device_id = "0a1b2c3d4e5f"
-  vlan_id   = 30
+  vlan_id = 30
 
   name         = "IoT"
   router_ip    = "203.0.113.1/24"
@@ -12,3 +11,12 @@ resource "alta_vlan" "iot" {
   isolation    = true
   mdns         = true
 }
+
+# Adopt a network the portal already has by its number:
+#
+#   terraform import alta_vlan.iot 30
+#
+# Set site_id on the resource, and name it in the import id, only for a site other than
+# the provider's:
+#
+#   terraform import alta_vlan.iot "$SITE_ID/30"

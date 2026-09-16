@@ -26,9 +26,6 @@ Terraform creates resources in dependency order, not in the order they are writt
 
 ```terraform
 resource "alta_firewall_rule" "wireguard" {
-  site_id   = "aBcDeFgHiJkLmNoPqRsTu"
-  device_id = "0a1b2c3d4e5f"
-
   description = "Allow WireGuard"
   action      = "ACCEPT"
   protocols   = ["udp"]
@@ -40,9 +37,6 @@ resource "alta_firewall_rule" "wireguard" {
 # Rules are evaluated in the order the site holds them, and a new rule is appended after
 # the rules already there. depends_on is what puts this one after the rule above.
 resource "alta_firewall_rule" "guest_to_lan" {
-  site_id   = "aBcDeFgHiJkLmNoPqRsTu"
-  device_id = "0a1b2c3d4e5f"
-
   description = "Keep the guest network off the LAN"
   action      = "DROP"
   zone_in     = "v1zone"
@@ -50,6 +44,18 @@ resource "alta_firewall_rule" "guest_to_lan" {
   destination = { address = "192.0.2.0/24" }
 
   depends_on = [alta_firewall_rule.wireguard]
+}
+
+# The site is the provider's unless a rule names its own, for a configuration that spans
+# more than one.
+resource "alta_firewall_rule" "branch_guest_to_lan" {
+  site_id = "aBcDeFgHiJkLmNoPqRsTu"
+
+  description = "Keep the branch guest network off its LAN"
+  action      = "DROP"
+  zone_in     = "v1zone"
+  zone_out    = "lan"
+  destination = { address = "198.51.100.0/24" }
 }
 ```
 
@@ -59,8 +65,6 @@ resource "alta_firewall_rule" "guest_to_lan" {
 ### Required
 
 - `action` (String) `ACCEPT`, `DROP` or `REJECT`.
-- `device_id` (String) Router device id: its MAC address, lowercase without separators.
-- `site_id` (String) Alta site id.
 
 ### Optional
 
@@ -71,6 +75,7 @@ resource "alta_firewall_rule" "guest_to_lan" {
 - `ip_version` (String) `ipv4`, `ipv6` or `any`.
 - `limit` (String) Rate limit, e.g. `1000/sec`.
 - `protocols` (Set of String) Protocols the rule matches; all when omitted.
+- `site_id` (String) Alta site. Defaults to the provider's `site_id`.
 - `source` (Attributes) Source match. (see [below for nested schema](#nestedatt--source))
 - `zone_in` (String) Zone the traffic arrives from.
 - `zone_out` (String) Zone the traffic is going to.

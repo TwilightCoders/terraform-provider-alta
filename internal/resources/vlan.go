@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
@@ -42,11 +41,13 @@ var vlanCollection = collection[routerconfig.VLAN]{
 // vlanIDPath is the network's identity: the VLAN number the router tags with.
 var vlanIDPath = path.Root("vlan_id")
 
+// vlanIDDescription documents the framework's id, which is only the number's string form.
+const vlanIDDescription = "The VLAN number, as a string."
+
 // vlanResourceModel is the flat form of vlanModel, plus the identity. The framework's
 // state reflection has no notion of embedded structs, so the fields are repeated.
 type vlanResourceModel struct {
 	SiteID      types.String `tfsdk:"site_id"`
-	DeviceID    types.String `tfsdk:"device_id"`
 	ID          types.String `tfsdk:"id"`
 	VLANID      types.Int64  `tfsdk:"vlan_id"`
 	Name        types.String `tfsdk:"name"`
@@ -59,6 +60,11 @@ type vlanResourceModel struct {
 	Isolation   types.Bool   `tfsdk:"isolation"`
 	MDNS        types.Bool   `tfsdk:"mdns"`
 }
+
+func (m vlanResourceModel) siteRef() types.String { return m.SiteID }
+
+// deviceRef is null: a VLAN belongs to the site, not to one of its devices.
+func (m vlanResourceModel) deviceRef() types.String { return types.StringNull() }
 
 func (m vlanResourceModel) vlan() routerconfig.VLAN {
 	return routerconfig.VLAN{
@@ -97,27 +103,19 @@ func (r *VLAN) Schema(_ context.Context, _ resource.SchemaRequest, resp *resourc
 // id: the number is what the router tags with, so the user chooses it and the framework's
 // id is only its string form.
 func vlanIdentityAttributes() map[string]schema.Attribute {
-	return map[string]schema.Attribute{
-		"site_id": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Alta site id.",
-			PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
-		},
-		"device_id": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Router device id: its MAC address, lowercase without separators.",
-			PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
-		},
-		"vlan_id": schema.Int64Attribute{
-			Required:            true,
-			MarkdownDescription: "VLAN number. Changing it is a different network, so the old one is removed and the new one created.",
-			PlanModifiers:       []planmodifier.Int64{int64planmodifier.RequiresReplace()},
-		},
-		"id": schema.StringAttribute{
-			Computed:            true,
-			MarkdownDescription: "The VLAN number, as a string.",
-		},
+	attributes := siteAttributes(vlanIDDescription)
+	// siteAttributes offers an id the user chooses or the provider generates. A VLAN is
+	// identified by its number instead, so id only follows from vlan_id.
+	attributes["id"] = schema.StringAttribute{
+		Computed:            true,
+		MarkdownDescription: vlanIDDescription,
 	}
+	attributes["vlan_id"] = schema.Int64Attribute{
+		Required:            true,
+		MarkdownDescription: "VLAN number. Changing it is a different network, so the old one is removed and the new one created.",
+		PlanModifiers:       []planmodifier.Int64{int64planmodifier.RequiresReplace()},
+	}
+	return attributes
 }
 
 func (r *VLAN) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -137,6 +135,7 @@ func (r *VLAN) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, r
 		return
 	}
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, idPath, types.StringValue(vlanCollection.id(routerconfig.VLAN{ID: number.ValueInt64()})))...)
+	r.planDefaults(ctx, resp)
 }
 
 func (r *VLAN) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -160,7 +159,7 @@ func (r *VLAN) Read(ctx context.Context, req resource.ReadRequest, resp *resourc
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	doc, err := r.document(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString())
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading VLAN", err.Error())
 		return
@@ -178,23 +177,24 @@ func (r *VLAN) Delete(ctx context.Context, req resource.DeleteRequest, resp *res
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.drop(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString(), state.ID.ValueString()); err != nil {
+	if err := r.drop(ctx, state, state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Removing VLAN", err.Error())
 	}
 }
 
 // ImportState adopts a network the portal already holds.
 func (r *VLAN) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	site, device, id, ok := importParts(req.ID, &resp.Diagnostics, "VLAN")
+	site, number, ok := r.importVLAN(req.ID, &resp.Diagnostics)
 	if !ok {
 		return
 	}
-	number, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid import id", "A VLAN is identified by its number, and "+id+" is not one.")
-		return
+	id := vlanCollection.id(routerconfig.VLAN{ID: number})
+	state := vlanResourceModel{
+		SiteID: types.StringValue(site),
+		ID:     types.StringValue(id),
+		VLANID: types.Int64Value(number),
 	}
-	doc, err := r.document(ctx, site, device)
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading VLAN", err.Error())
 		return
@@ -204,16 +204,26 @@ func (r *VLAN) ImportState(ctx context.Context, req resource.ImportStateRequest,
 		resp.Diagnostics.AddError("No such VLAN", "The site has no VLAN "+id+".")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, vlanResourceModel{
-		SiteID:   types.StringValue(site),
-		DeviceID: types.StringValue(device),
-		ID:       types.StringValue(id),
-		VLANID:   types.Int64Value(number),
-	}.withVLAN(vlan))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state.withVLAN(vlan))...)
+}
+
+// importVLAN reads "<vlan_id>" or "<site_id>/<vlan_id>". A network is identified by the
+// number the router tags with, so the id half is a number rather than a generated id.
+func (r *VLAN) importVLAN(raw string, diags *diag.Diagnostics) (site string, number int64, ok bool) {
+	site, id, ok := r.siteScopedImport(raw, diags)
+	if !ok {
+		return "", 0, false
+	}
+	number, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		diags.AddError("Invalid import id", "A VLAN is identified by its number, and "+id+" is not one.")
+		return "", 0, false
+	}
+	return site, number, true
 }
 
 func (r *VLAN) write(ctx context.Context, plan vlanResourceModel, state stateSetter, diags *diag.Diagnostics) {
-	if err := r.put(ctx, plan.SiteID.ValueString(), plan.DeviceID.ValueString(), plan.vlan()); err != nil {
+	if err := r.put(ctx, plan, plan.vlan()); err != nil {
 		diags.AddError("Writing VLAN", err.Error())
 		return
 	}

@@ -29,6 +29,8 @@ const Address = "registry.terraform.io/twilightcoders/alta"
 const (
 	EnvEmail    = "ALTA_LABS_EMAIL"
 	EnvPassword = "ALTA_LABS_PASSWORD"
+	EnvSite     = "ALTA_LABS_SITE_ID"
+	EnvDevice   = "ALTA_LABS_DEVICE_ID"
 	EnvAgent    = "SSH_AUTH_SOCK"
 )
 
@@ -51,6 +53,8 @@ func New(version string) func() provider.Provider {
 type config struct {
 	Email       types.String       `tfsdk:"email"`
 	Password    types.String       `tfsdk:"password"`
+	SiteID      types.String       `tfsdk:"site_id"`
+	DeviceID    types.String       `tfsdk:"device_id"`
 	ReadOnly    types.Bool         `tfsdk:"read_only"`
 	SSH         *sshConfig         `tfsdk:"ssh"`
 	Transaction *transactionConfig `tfsdk:"transaction"`
@@ -94,6 +98,18 @@ func (p *Provider) Schema(_ context.Context, _ provider.SchemaRequest, resp *pro
 			"password": schema.StringAttribute{
 				Optional: true, Sensitive: true,
 				MarkdownDescription: "Alta account password. Defaults to `$" + EnvPassword + "`.",
+			},
+			"site_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Alta site every resource belongs to unless it names another. Defaults to `$" +
+					EnvSite + "`. Almost all configuration belongs to a site rather than to one device, so setting " +
+					"it here keeps it off every resource.",
+			},
+			"device_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Router this site's device-scoped resources belong to — its MAC address, " +
+					"lowercase without separators. Defaults to `$" + EnvDevice + "`. Only resources that configure " +
+					"the hardware itself, such as `alta_switch_port`, need one.",
 			},
 			"read_only": schema.BoolAttribute{
 				Optional: true,
@@ -154,8 +170,9 @@ func duration(description string) schema.StringAttribute {
 
 // Settings is validated provider configuration.
 type Settings struct {
-	Email, Password string
-	ReadOnly        bool
+	Email, Password  string
+	SiteID, DeviceID string
+	ReadOnly         bool
 	// SSH is nil when no router connection is configured.
 	SSH    *device.SSHConfig
 	Gate   device.Options
@@ -188,6 +205,8 @@ func (c config) settings() (Settings, diag.Diagnostics) {
 	s := Settings{
 		Email:    valueOrEnv(c.Email, EnvEmail),
 		Password: valueOrEnv(c.Password, EnvPassword),
+		SiteID:   valueOrEnv(c.SiteID, EnvSite),
+		DeviceID: valueOrEnv(c.DeviceID, EnvDevice),
 		ReadOnly: c.ReadOnly.ValueBool(),
 	}
 	if s.Email == "" || s.Password == "" {
@@ -239,7 +258,7 @@ func (c config) settings() (Settings, diag.Diagnostics) {
 // Build composes the production dependencies.
 func Build(s Settings) (*resources.ProviderData, error) {
 	client := cloud.NewClient(cloud.Config{Email: s.Email, Password: s.Password})
-	data := &resources.ProviderData{Cloud: client, ReadOnly: s.ReadOnly}
+	data := &resources.ProviderData{Cloud: client, ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID}
 	if s.SSH == nil {
 		return data, nil
 	}
@@ -267,7 +286,7 @@ func (p *Provider) Resources(_ context.Context) []func() resource.Resource {
 }
 
 func (p *Provider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{resources.NewDevices}
 }
 
 func valueOrEnv(v types.String, env string) string {

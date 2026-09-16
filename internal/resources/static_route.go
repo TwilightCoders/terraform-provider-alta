@@ -39,7 +39,6 @@ var staticRouteCollection = collection[routerconfig.StaticRoute]{
 // mapping to the domain type stays shared.
 type staticRouteResourceModel struct {
 	SiteID    types.String `tfsdk:"site_id"`
-	DeviceID  types.String `tfsdk:"device_id"`
 	ID        types.String `tfsdk:"id"`
 	Name      types.String `tfsdk:"name"`
 	Type      types.String `tfsdk:"type"`
@@ -48,6 +47,11 @@ type staticRouteResourceModel struct {
 	Interface types.String `tfsdk:"interface"`
 	Metric    types.Int64  `tfsdk:"metric"`
 }
+
+func (m staticRouteResourceModel) siteRef() types.String { return m.SiteID }
+
+// deviceRef is null: a route belongs to the site, not to one of its devices.
+func (m staticRouteResourceModel) deviceRef() types.String { return types.StringNull() }
 
 func (m staticRouteResourceModel) route() routerconfig.StaticRoute {
 	return staticRouteModel{
@@ -109,7 +113,7 @@ func (r *StaticRoute) Read(ctx context.Context, req resource.ReadRequest, resp *
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	doc, err := r.document(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString())
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading static route", err.Error())
 		return
@@ -127,18 +131,19 @@ func (r *StaticRoute) Delete(ctx context.Context, req resource.DeleteRequest, re
 	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.drop(ctx, state.SiteID.ValueString(), state.DeviceID.ValueString(), state.ID.ValueString()); err != nil {
+	if err := r.drop(ctx, state, state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Removing static route", err.Error())
 	}
 }
 
 // ImportState adopts a route the portal already holds.
 func (r *StaticRoute) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	site, device, id, ok := importParts(req.ID, &resp.Diagnostics, "route")
+	site, id, ok := r.siteScopedImport(req.ID, &resp.Diagnostics)
 	if !ok {
 		return
 	}
-	doc, err := r.document(ctx, site, device)
+	state := staticRouteResourceModel{SiteID: types.StringValue(site), ID: types.StringValue(id)}
+	doc, err := r.document(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading static route", err.Error())
 		return
@@ -148,11 +153,7 @@ func (r *StaticRoute) ImportState(ctx context.Context, req resource.ImportStateR
 		resp.Diagnostics.AddError("No such route", "The site has no route with id "+id+".")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, staticRouteResourceModel{
-		SiteID:   types.StringValue(site),
-		DeviceID: types.StringValue(device),
-		ID:       types.StringValue(id),
-	}.withRoute(route))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state.withRoute(route))...)
 }
 
 func (r *StaticRoute) write(ctx context.Context, plan staticRouteResourceModel, state stateSetter, diags *diag.Diagnostics) {
@@ -161,7 +162,7 @@ func (r *StaticRoute) write(ctx context.Context, plan staticRouteResourceModel, 
 		diags.AddError("Invalid static route", err.Error())
 		return
 	}
-	if err := r.put(ctx, plan.SiteID.ValueString(), plan.DeviceID.ValueString(), route); err != nil {
+	if err := r.put(ctx, plan, route); err != nil {
 		diags.AddError("Writing static route", err.Error())
 		return
 	}

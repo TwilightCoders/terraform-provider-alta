@@ -44,6 +44,9 @@ func readSwitchPorts(device cloud.Object) []SwitchPort {
 }
 
 func writeSwitchPorts(device cloud.Object, desired []SwitchPort) error {
+	if device == nil {
+		return fmt.Errorf("switch ports belong to a device, so a device id is required")
+	}
 	seen := map[int64]bool{}
 	for _, sp := range desired {
 		if seen[sp.Port] {
