@@ -428,6 +428,13 @@
       "device": "staticRoutes then network.@route",
       "status": "unverified",
       "note": "The cloud vocabulary is confirmed from the portal's own save path, which builds {id, name, type, network, nextHop, interface, metric}, drops empty fields, sends metric as a number, generates the id client-side as a 6-character nanoid, and rewrites the whole array sorted by metric then destination. The device generator reads staticRoutes and emits network.@route target/gateway/interface/type/metric/table/mtu. No route has been pushed and observed end to end yet, so static_route stays unobserved."
+    },
+    {
+      "cloud": "device.services.dnsForwarder.allServers",
+      "device": "(nothing)",
+      "status": "defect",
+      "note": "Tested directly on 2026-09-15: the cloud stores an unknown key and echoes it back on the next read, but drops it when composing config.json. device.services.dnsForwarder.hostRecords, which the portal itself holds, is dropped the same way; only listenInterfaces survives. The router's own compiler reads allServers, useDoH, logQueries, logDHCP, sequentialIP, domainOverrides and hostRecords, and interfaces[] additionally carries peerDNS, mtu, mssClamping and mssClampSize, but none of that is reachable: the cloud composes config.json from its own model, so a key it has no field for never arrives. Writing one looks successful and changes nothing.",
+      "observed": "2026-09-15"
     }
   ]
 }
