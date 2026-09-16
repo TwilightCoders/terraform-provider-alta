@@ -73,5 +73,6 @@ resource "alta_device_hook" "resolver_exemption" {
 
 ### Read-Only
 
+- `loader_installed` (Boolean) Whether the loader that reinstalls hooks after a boot or push is on the router. The provider owns that file, so a missing one is drift: the next plan proposes restoring it.
 - `path` (String) Where the hook is stored on the router.
 - `sha256` (String) Checksum of the installed script, so drift on the router is visible.

@@ -22,11 +22,14 @@ type fakeHooks struct {
 	deleted []string
 	destroy []string
 	loader  bool
+	sourced bool
 }
 
 func newFakeHooks() *fakeHooks {
 	return &fakeHooks{stored: map[string]device.Hook{}, files: map[string]device.File{}}
 }
+
+func (f *fakeHooks) SourceLine() string { return "[ -x /cfg/tf.d/loader.sh ] && /cfg/tf.d/loader.sh" }
 
 func (f *fakeHooks) PutFile(_ context.Context, file device.File) (device.FileState, error) {
 	f.files[file.Path] = file
@@ -79,7 +82,7 @@ func (f *fakeHooks) Delete(_ context.Context, h device.Hook, destroy string) err
 func (f *fakeHooks) state(h device.Hook) device.HookState {
 	sum := sha256.Sum256([]byte(h.Script))
 	return device.HookState{
-		Present: true, Loader: f.loader, Installed: h.Interface != "",
+		Present: true, LoaderPresent: f.loader, Sourced: f.sourced, Installed: h.Interface != "",
 		SHA256: hex.EncodeToString(sum[:]), Script: h.Script,
 	}
 }
@@ -128,11 +131,28 @@ func TestDeviceHookLifecycle(t *testing.T) {
 				PlanOnly: true,
 			},
 			{
+				// A loader the provider owns has gone missing: that is drift, and the
+				// plan has to propose putting it back rather than warning over an
+				// empty diff. Left as a warning, the hook silently stops surviving
+				// boots and pushes.
+				PreConfig: func() { hooks.loader = false },
+				Config:    providerBlock(false) + hookConfig("iptables -C CHAIN -j RETURN || iptables -I CHAIN -j RETURN\n"),
+				Check: func(*terraform.State) error {
+					if len(hooks.ran) != 2 {
+						return fmt.Errorf("a missing loader left the plan empty: hook ran %d times, want 2", len(hooks.ran))
+					}
+					if !hooks.loader {
+						return fmt.Errorf("the loader was not restored")
+					}
+					return nil
+				},
+			},
+			{
 				// A changed script reinstalls and runs again.
 				Config: providerBlock(false) + hookConfig("iptables -w -C CHAIN -j RETURN || iptables -w -I CHAIN -j RETURN\n"),
 				Check: func(*terraform.State) error {
-					if len(hooks.ran) != 2 {
-						return fmt.Errorf("hook ran %d times after an edit, want 2", len(hooks.ran))
+					if len(hooks.ran) != 3 {
+						return fmt.Errorf("hook ran %d times after an edit, want 3", len(hooks.ran))
 					}
 					return nil
 				},

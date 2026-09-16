@@ -110,6 +110,9 @@ func (l Layout) SourceLine() string {
 	return fmt.Sprintf("[ -x %s ] && %s", loader, loader)
 }
 
+// SourceLine names the loader the way post-cfg.sh must invoke it.
+func (e *Extensions) SourceLine() string { return e.layout.SourceLine() }
+
 // loaderScript installs hotplug hooks and runs boot hooks. The provider owns this file
 // outright, so nothing has to parse or merge anyone else's text.
 func (e *Extensions) loaderScript() string {

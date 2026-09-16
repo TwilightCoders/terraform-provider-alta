@@ -6,12 +6,14 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/device"
@@ -42,6 +44,7 @@ type deviceHookModel struct {
 	RunOnApply    types.Bool   `tfsdk:"run_on_apply"`
 	Path          types.String `tfsdk:"path"`
 	SHA256        types.String `tfsdk:"sha256"`
+	Loader        types.Bool   `tfsdk:"loader_installed"`
 }
 
 func (m deviceHookModel) hook() device.Hook {
@@ -120,6 +123,11 @@ func (r *DeviceHook) Schema(_ context.Context, _ resource.SchemaRequest, resp *r
 				Computed:            true,
 				MarkdownDescription: "Checksum of the installed script, so drift on the router is visible.",
 			},
+			"loader_installed": schema.BoolAttribute{
+				Computed: true,
+				MarkdownDescription: "Whether the loader that reinstalls hooks after a boot or push is on the router. " +
+					"The provider owns that file, so a missing one is drift: the next plan proposes restoring it.",
+			},
 		},
 	}
 }
@@ -128,9 +136,21 @@ func (r *DeviceHook) Configure(_ context.Context, req resource.ConfigureRequest,
 	r.data = providerData(req.ProviderData, &resp.Diagnostics)
 }
 
-// ModifyPlan refuses hook changes the provider is not allowed or able to make.
-func (r *DeviceHook) ModifyPlan(_ context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if r.data == nil || req.State.Raw.Equal(req.Plan.Raw) {
+// ModifyPlan puts a missing loader in the diff, and refuses hook changes the provider is
+// not allowed or able to make.
+func (r *DeviceHook) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.data == nil || req.Plan.Raw.IsNull() {
+		return
+	}
+	changed := !req.State.Raw.Equal(req.Plan.Raw)
+	if !req.State.Raw.IsNull() && r.loaderMissing(ctx, req.State, &resp.Diagnostics) {
+		// The loader is the provider's own file, so restoring it is a change to propose,
+		// not a warning to print over an empty plan.
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("loader_installed"), types.BoolUnknown())...)
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("sha256"), types.StringUnknown())...)
+		changed = true
+	}
+	if !changed {
 		return
 	}
 	switch {
@@ -141,6 +161,13 @@ func (r *DeviceHook) ModifyPlan(_ context.Context, req resource.ModifyPlanReques
 		resp.Diagnostics.AddError("Router connection required",
 			"Managing router hooks needs the provider's ssh block.")
 	}
+}
+
+// loaderMissing reports whether the last refresh found the loader gone.
+func (r *DeviceHook) loaderMissing(ctx context.Context, state tfsdk.State, diags *diag.Diagnostics) bool {
+	var installed types.Bool
+	diags.Append(state.GetAttribute(ctx, path.Root("loader_installed"), &installed)...)
+	return !installed.IsNull() && !installed.ValueBool()
 }
 
 func (r *DeviceHook) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -176,10 +203,13 @@ func (r *DeviceHook) Read(ctx context.Context, req resource.ReadRequest, resp *r
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	if !got.Loader {
-		resp.Diagnostics.AddWarning("Hook loader missing",
-			"post-cfg.sh no longer reinstalls hooks, so this one will not survive the next boot or push. Applying restores it.")
+	if !got.Sourced {
+		// post-cfg.sh is not the provider's to write, so this is as far as it can go.
+		resp.Diagnostics.AddWarning("Hook loader not sourced",
+			"post-cfg.sh no longer runs the hook loader, so hooks will not survive the next boot or "+
+				"configuration push. Add this line to post-cfg.sh:\n\n    "+r.data.Hooks.SourceLine())
 	}
+	state.Loader = types.BoolValue(got.LoaderPresent)
 	state.SHA256 = types.StringValue(got.SHA256)
 	state.Path = types.StringValue(state.hook().FileName())
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -221,5 +251,6 @@ func (r *DeviceHook) put(ctx context.Context, plan deviceHookModel, state stateS
 	}
 	plan.SHA256 = types.StringValue(got.SHA256)
 	plan.Path = types.StringValue(plan.hook().FileName())
+	plan.Loader = types.BoolValue(got.LoaderPresent)
 	diags.Append(state.Set(ctx, plan)...)
 }

@@ -82,9 +82,12 @@ func (h Hook) validate() error {
 // HookState is what the router currently holds for a hook.
 type HookState struct {
 	Present bool
-	// Loader reports whether post-cfg.sh sources the provider's hook loader, without which
-	// hooks do not survive a boot or configuration push.
-	Loader bool
+	// LoaderPresent reports whether the provider's own loader file is in place. The
+	// provider owns that file, so its absence is drift.
+	LoaderPresent bool
+	// Sourced reports whether post-cfg.sh runs the loader. That file belongs to whoever
+	// manages it, so its absence is reported rather than corrected.
+	Sourced bool
 	// Installed reports whether a hotplug hook is in place for the current boot.
 	Installed bool
 	SHA256    string
@@ -118,11 +121,12 @@ func (e *Extensions) Put(ctx context.Context, h Hook) (HookState, error) {
 	}
 	fields := parseKeyValues(out)
 	return HookState{
-		Present:   true,
-		Loader:    fields["loader"] == "1",
-		Installed: h.Interface != "",
-		SHA256:    fields["sha256"],
-		Script:    h.body(),
+		Present:       true,
+		LoaderPresent: true, // just written
+		Sourced:       fields["sourced"] == "1",
+		Installed:     h.Interface != "",
+		SHA256:        fields["sha256"],
+		Script:        h.body(),
 	}, nil
 }
 
@@ -136,11 +140,12 @@ func (e *Extensions) Get(ctx context.Context, h Hook) (HookState, error) {
 	head, script, _ := strings.Cut(string(out), "--script--\n")
 	fields := parseKeyValues([]byte(head))
 	return HookState{
-		Present:   fields["present"] == "1",
-		Loader:    fields["loader"] == "1",
-		Installed: fields["installed"] == "1",
-		SHA256:    fields["sha256"],
-		Script:    script,
+		Present:       fields["present"] == "1",
+		LoaderPresent: fields["loader"] == "1",
+		Sourced:       fields["sourced"] == "1",
+		Installed:     fields["installed"] == "1",
+		SHA256:        fields["sha256"],
+		Script:        script,
 	}, nil
 }
 

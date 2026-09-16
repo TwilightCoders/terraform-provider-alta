@@ -20,7 +20,7 @@ LOADER
 chmod 755 "$H/loader.sh.new"
 mv "$H/loader.sh.new" "$H/loader.sh"
 
-if grep -qF {{q .SourceLine}} {{q .PostCfg}} 2>/dev/null; then echo loader=1; else echo loader=0; fi
+if grep -qF {{q .SourceLine}} {{q .PostCfg}} 2>/dev/null; then echo sourced=1; else echo sourced=0; fi
 
 {{if .Hook.Interface}}
 cp "$target" {{q .HotplugDir}}/{{.Hook.FileName}}

@@ -31,6 +31,9 @@ type DeviceHooks interface {
 	Put(ctx context.Context, h device.Hook) (device.HookState, error)
 	Get(ctx context.Context, h device.Hook) (device.HookState, error)
 	Delete(ctx context.Context, h device.Hook, destroy string) error
+	// SourceLine is the one line post-cfg.sh needs, so the provider can name it when the
+	// router is missing it. That file is not the provider's to write.
+	SourceLine() string
 	PutFile(ctx context.Context, f device.File) (device.FileState, error)
 	GetFile(ctx context.Context, f device.File) (device.FileState, error)
 	DeleteFile(ctx context.Context, f device.File) error

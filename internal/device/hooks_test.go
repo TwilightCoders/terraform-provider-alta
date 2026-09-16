@@ -77,8 +77,31 @@ func TestHookIsStoredInstalledAndLoadable(t *testing.T) {
 	if !strings.Contains(loader, "hotplug/*") || strings.Contains(loader, "install ") {
 		t.Errorf("loader.sh = %q", loader)
 	}
-	if state.Loader {
-		t.Error("post-cfg.sh does not source the loader, so Loader must be false")
+	if !state.LoaderPresent {
+		t.Error("the provider wrote the loader, so LoaderPresent must be true")
+	}
+	if state.Sourced {
+		t.Error("post-cfg.sh does not source the loader, so Sourced must be false")
+	}
+}
+
+// TestHookReportsAMissingLoader covers the case the loader exists for: the file the
+// provider owns is gone, which has to reach the plan rather than a warning.
+func TestHookReportsAMissingLoader(t *testing.T) {
+	r := newHookRouter(t)
+	hook := resolverHook
+	hook.Script, hook.Run = "true\n", false
+	_, err := r.ext.Put(context.Background(), hook)
+	must(t, err)
+	must(t, os.Remove(filepath.Join(r.root, "tf.d", "loader.sh")))
+
+	got, err := r.ext.Get(context.Background(), hook)
+	must(t, err)
+	if !got.Present {
+		t.Fatal("the hook itself is still there")
+	}
+	if got.LoaderPresent {
+		t.Error("the loader was deleted, so LoaderPresent must be false")
 	}
 }
 
@@ -91,13 +114,13 @@ func TestHookReportsWhenPostCfgSourcesTheLoader(t *testing.T) {
 
 	state, err := r.ext.Put(context.Background(), hook)
 	must(t, err)
-	if !state.Loader {
-		t.Error("the source line is present, so Loader must be true")
+	if !state.Sourced {
+		t.Error("the source line is present, so Sourced must be true")
 	}
 	got, err := r.ext.Get(context.Background(), hook)
 	must(t, err)
-	if !got.Loader {
-		t.Error("Get disagrees with Put about the loader")
+	if !got.Sourced || !got.LoaderPresent {
+		t.Errorf("Get disagrees with Put about the loader: %+v", got)
 	}
 }
 
