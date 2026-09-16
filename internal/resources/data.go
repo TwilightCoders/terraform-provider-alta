@@ -25,11 +25,15 @@ type Transactor interface {
 	Run(ctx context.Context, change txn.Change) (txn.Result, error)
 }
 
-// DeviceHooks manages scripts the router runs for itself.
+// DeviceHooks manages what the provider keeps on the router itself: hook scripts it runs
+// for itself, and files that must survive the rebuild of /etc.
 type DeviceHooks interface {
 	Put(ctx context.Context, h device.Hook) (device.HookState, error)
 	Get(ctx context.Context, h device.Hook) (device.HookState, error)
 	Delete(ctx context.Context, h device.Hook, destroy string) error
+	PutFile(ctx context.Context, f device.File) (device.FileState, error)
+	GetFile(ctx context.Context, f device.File) (device.FileState, error)
+	DeleteFile(ctx context.Context, f device.File) error
 }
 
 // ProviderData is what the provider hands to resources.

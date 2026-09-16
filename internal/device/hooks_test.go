@@ -10,9 +10,10 @@ import (
 
 // hookRouter is a fake router with the directories a hook touches.
 type hookRouter struct {
-	t    *testing.T
-	root string
-	ext  *Extensions
+	t       *testing.T
+	root    string
+	ext     *Extensions
+	postCfg string
 }
 
 func newHookRouter(t *testing.T) *hookRouter {
@@ -25,7 +26,9 @@ func newHookRouter(t *testing.T) *hookRouter {
 	layout.HookDir = filepath.Join(root, "tf.d")
 	layout.HotplugDir = filepath.Join(root, "etc", "hotplug.d", "iface")
 	layout.PostCfg = filepath.Join(root, "post-cfg.sh")
-	return &hookRouter{t: t, root: root, ext: NewExtensions(localRunner{path: os.Getenv("PATH")}, layout)}
+	r := &hookRouter{t: t, root: root, ext: NewExtensions(localRunner{path: os.Getenv("PATH")}, layout)}
+	r.postCfg = r.read("post-cfg.sh")
+	return r
 }
 
 func (r *hookRouter) read(path string) string {
@@ -51,7 +54,7 @@ func TestHookIsStoredInstalledAndLoadable(t *testing.T) {
 
 	state, err := r.ext.Put(context.Background(), hook)
 	must(t, err)
-	if !state.Present || !state.Loader || !state.Installed || state.SHA256 == "" {
+	if !state.Present || !state.Installed || state.SHA256 == "" {
 		t.Fatalf("state = %+v", state)
 	}
 	if _, err := os.Stat(marker); err != nil {
@@ -66,15 +69,51 @@ func TestHookIsStoredInstalledAndLoadable(t *testing.T) {
 		t.Error("the hook was not installed for the current boot")
 	}
 
-	postCfg := r.read("post-cfg.sh")
-	if !strings.Contains(postCfg, loaderMarker) {
-		t.Fatalf("post-cfg.sh has no loader block:\n%s", postCfg)
+	// The provider owns a loader file; post-cfg.sh belongs to whoever manages that file.
+	if before, after := r.postCfg, r.read("post-cfg.sh"); before != after {
+		t.Errorf("post-cfg.sh was modified:\n%s", after)
 	}
-	if !strings.HasSuffix(strings.TrimSpace(postCfg), "exit 0") {
-		t.Errorf("the loader block must sit before the trailing exit 0:\n%s", postCfg)
+	loader := r.read(filepath.Join("tf.d", "loader.sh"))
+	if !strings.Contains(loader, "hotplug/*") || strings.Contains(loader, "install ") {
+		t.Errorf("loader.sh = %q", loader)
 	}
-	if !strings.Contains(postCfg, "ip route add 203.0.113.0/24") {
-		t.Error("existing post-cfg.sh content was lost")
+	if state.Loader {
+		t.Error("post-cfg.sh does not source the loader, so Loader must be false")
+	}
+}
+
+func TestHookReportsWhenPostCfgSourcesTheLoader(t *testing.T) {
+	r := newHookRouter(t)
+	must(t, os.WriteFile(filepath.Join(r.root, "post-cfg.sh"),
+		[]byte("#!/bin/ash\n"+r.ext.layout.SourceLine()+"\nexit 0\n"), 0o755))
+	hook := resolverHook
+	hook.Script, hook.Run = "true\n", false
+
+	state, err := r.ext.Put(context.Background(), hook)
+	must(t, err)
+	if !state.Loader {
+		t.Error("the source line is present, so Loader must be true")
+	}
+	got, err := r.ext.Get(context.Background(), hook)
+	must(t, err)
+	if !got.Loader {
+		t.Error("Get disagrees with Put about the loader")
+	}
+}
+
+// TestLoaderRunsHooksTheWayBootDoes executes the loader itself.
+func TestLoaderRunsHooksTheWayBootDoes(t *testing.T) {
+	r := newHookRouter(t)
+	hook := resolverHook
+	hook.Script, hook.Run = "true\n", false
+	_, err := r.ext.Put(context.Background(), hook)
+	must(t, err)
+	must(t, os.Remove(filepath.Join(r.root, "etc", "hotplug.d", "iface", hook.FileName())))
+
+	_, err = localRunner{path: os.Getenv("PATH")}.Run(context.Background(), "sh "+filepath.Join(r.root, "tf.d", "loader.sh"), nil)
+	must(t, err)
+	if r.read(filepath.Join("etc", "hotplug.d", "iface", hook.FileName())) == "" {
+		t.Error("the loader did not reinstall the hook")
 	}
 }
 
@@ -85,18 +124,15 @@ func TestHookPutIsIdempotent(t *testing.T) {
 
 	first, err := r.ext.Put(context.Background(), hook)
 	must(t, err)
-	before := r.read("post-cfg.sh")
+	loader := r.read(filepath.Join("tf.d", "loader.sh"))
 
 	second, err := r.ext.Put(context.Background(), hook)
 	must(t, err)
 	if first.SHA256 != second.SHA256 {
 		t.Errorf("hash changed for identical content: %s vs %s", first.SHA256, second.SHA256)
 	}
-	if after := r.read("post-cfg.sh"); after != before {
-		t.Errorf("the loader block was added twice:\n%s", after)
-	}
-	if n := strings.Count(before, loaderMarker); n != 2 { // one open marker, one close
-		t.Errorf("loader markers = %d, want 2", n)
+	if again := r.read(filepath.Join("tf.d", "loader.sh")); again != loader {
+		t.Error("loader.sh changed on a repeat apply")
 	}
 }
 
@@ -115,7 +151,7 @@ func TestHookGetReportsWhatTheRouterHolds(t *testing.T) {
 	must(t, err)
 	got, err := r.ext.Get(context.Background(), hook)
 	must(t, err)
-	if !got.Present || !got.Loader || !got.Installed || got.SHA256 != put.SHA256 {
+	if !got.Present || !got.Installed || got.SHA256 != put.SHA256 {
 		t.Fatalf("state = %+v, want the hook as written (%s)", got, put.SHA256)
 	}
 	if strings.TrimSpace(got.Script) != strings.TrimSpace(hook.body()) {
@@ -205,8 +241,12 @@ func TestHookRefusesWhenTheRouterLacksABinary(t *testing.T) {
 func TestGeneratedShellAvoidsAbsentBusyboxCommands(t *testing.T) {
 	absent := []string{"install", "realpath", "timeout -k", "readlink -f", "sed -i ", "head -n -"}
 	ext := NewExtensions(localRunner{}, Route10Layout())
-	rendered := map[string]string{"loader": ext.loaderBlock()}
-	for _, name := range []string{"hook-put.sh", "hook-get.sh", "hook-delete.sh"} {
+	rendered := map[string]string{"loader": ext.loaderScript()}
+	for _, name := range []string{"hook-put.sh", "hook-get.sh", "hook-delete.sh", "file-put.sh", "file-get.sh"} {
+		if strings.HasPrefix(name, "file-") {
+			rendered[name] = render(name, fileData{Layout: Route10Layout(), File: File{Path: "/cfg/x", Mode: "0755"}})
+			continue
+		}
 		rendered[name] = render(name, ext.data(Hook{Name: "x", Interface: "wg0", Script: "true"}))
 	}
 	for name, script := range rendered {

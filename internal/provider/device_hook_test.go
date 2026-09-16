@@ -14,16 +14,43 @@ import (
 	"github.com/TwilightCoders/terraform-provider-alta/internal/device"
 )
 
-// fakeHooks is a router that remembers the hooks written to it.
+// fakeHooks is a router that remembers the hooks and files written to it.
 type fakeHooks struct {
 	stored  map[string]device.Hook
+	files   map[string]device.File
 	ran     []string
 	deleted []string
 	destroy []string
 	loader  bool
 }
 
-func newFakeHooks() *fakeHooks { return &fakeHooks{stored: map[string]device.Hook{}} }
+func newFakeHooks() *fakeHooks {
+	return &fakeHooks{stored: map[string]device.Hook{}, files: map[string]device.File{}}
+}
+
+func (f *fakeHooks) PutFile(_ context.Context, file device.File) (device.FileState, error) {
+	f.files[file.Path] = file
+	return f.fileState(file), nil
+}
+
+func (f *fakeHooks) GetFile(_ context.Context, file device.File) (device.FileState, error) {
+	stored, ok := f.files[file.Path]
+	if !ok {
+		return device.FileState{}, nil
+	}
+	return f.fileState(stored), nil
+}
+
+func (f *fakeHooks) DeleteFile(_ context.Context, file device.File) error {
+	delete(f.files, file.Path)
+	f.deleted = append(f.deleted, file.Path)
+	return nil
+}
+
+func (f *fakeHooks) fileState(file device.File) device.FileState {
+	sum := sha256.Sum256([]byte(file.Content))
+	return device.FileState{Present: true, SHA256: hex.EncodeToString(sum[:]), Mode: file.Mode, Content: file.Content}
+}
 
 func (f *fakeHooks) Put(_ context.Context, h device.Hook) (device.HookState, error) {
 	f.stored[h.Name] = h

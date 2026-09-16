@@ -12,26 +12,15 @@ cat > "$target.tmp"
 chmod 755 "$target.tmp"
 mv "$target.tmp" "$target"
 
-# The loader lives in post-cfg.sh because /etc is rebuilt on every boot and every config
-# push. It installs hotplug hooks and runs boot hooks, and is idempotent.
-P={{q .PostCfg}}
-if ! grep -q {{q .LoaderMarker}} "$P" 2>/dev/null; then
-  cp "$P" "$P.bak-alta-$(date +%Y%m%d-%H%M%S)"
-  # Keep everything except a trailing "exit 0", append the block, then restore it:
-  # nothing after that line ever runs.
-  lines=$(wc -l < "$P")
-  if [ "$(tail -n 1 "$P")" = "exit 0" ]; then
-    sed -n "1,$((lines - 1))p" "$P" > "$P.next"
-  else
-    cat "$P" > "$P.next"
-  fi
-  cat >> "$P.next" <<'LOADER'
-{{.LoaderBlock}}
+# The loader is a file this provider owns. post-cfg.sh only has to source it, which is
+# one line a human keeps in their own copy — no generated block, nothing to parse.
+cat > "$H/loader.sh.new" <<'LOADER'
+{{.LoaderScript}}
 LOADER
-  echo "exit 0" >> "$P.next"
-  chmod 755 "$P.next"
-  mv "$P.next" "$P"
-fi
+chmod 755 "$H/loader.sh.new"
+mv "$H/loader.sh.new" "$H/loader.sh"
+
+if grep -qF {{q .SourceLine}} {{q .PostCfg}} 2>/dev/null; then echo loader=1; else echo loader=0; fi
 
 {{if .Hook.Interface}}
 cp "$target" {{q .HotplugDir}}/{{.Hook.FileName}}

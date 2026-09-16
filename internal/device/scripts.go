@@ -30,6 +30,8 @@ type Layout struct {
 	HookDir    string
 	HotplugDir string
 	PostCfg    string
+	// StatMode prints a file's permission bits in octal.
+	StatMode string
 	// Detach starts the rollback timer in its own session so it outlives the SSH session.
 	Detach string
 }
@@ -50,6 +52,7 @@ func Route10Layout() Layout {
 		HookDir:      "/cfg/tf.d",
 		HotplugDir:   "/etc/hotplug.d/iface",
 		PostCfg:      "/cfg/post-cfg.sh",
+		StatMode:     "stat -c %a",
 	}
 }
 

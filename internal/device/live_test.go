@@ -64,7 +64,7 @@ func TestLiveHookScriptsRunOnTheRouter(t *testing.T) {
 	}
 
 	// The loader is what runs at boot and after every push; run it the same way.
-	script := strings.Join([]string{"rm -f " + layout.HotplugDir + "/*", ext.loaderBlock(), "ls " + layout.HotplugDir}, "\n")
+	script := strings.Join([]string{"rm -f " + layout.HotplugDir + "/*", "sh " + layout.HookDir + "/loader.sh", "ls " + layout.HotplugDir}, "\n")
 	out, err := runner.Run(context.Background(), script, nil)
 	must(t, err)
 	if !strings.Contains(string(out), hook.FileName()) {
@@ -90,4 +90,38 @@ func liveRunner(t *testing.T, host string) Runner {
 	runner, err := NewSSHRunner(cfg)
 	must(t, err)
 	return runner
+}
+
+// TestLiveFileScriptsRunOnTheRouter exercises the file mechanism against the router's
+// own shell, under /tmp. Real paths are untouched.
+func TestLiveFileScriptsRunOnTheRouter(t *testing.T) {
+	host := os.Getenv("ALTA_ROUTER_HOST")
+	if os.Getenv("TF_ACC") == "" || host == "" {
+		t.Skip("set TF_ACC=1 and ALTA_ROUTER_HOST to run")
+	}
+	runner := liveRunner(t, host)
+	root := "/tmp/alta-file-check"
+	_, err := runner.Run(context.Background(), "rm -rf "+root+" && mkdir -p "+root+" && printf 'original\n' > "+root+"/adopted.sh && chmod 644 "+root+"/adopted.sh", nil)
+	must(t, err)
+	t.Cleanup(func() { _, _ = runner.Run(context.Background(), "rm -rf "+root, nil) })
+
+	ext := NewExtensions(runner, Route10Layout())
+	f := File{Path: root + "/adopted.sh", Content: "#!/bin/sh\ntrue\n", Mode: "0755", Backup: true}
+
+	state, err := ext.PutFile(context.Background(), f)
+	must(t, err)
+	if state.Mode != "0755" || state.SHA256 == "" {
+		t.Fatalf("state = %+v", state)
+	}
+	got, err := ext.GetFile(context.Background(), f)
+	must(t, err)
+	if got.Content != f.Content || got.Mode != "0755" {
+		t.Errorf("read back %+v", got)
+	}
+	backup, err := runner.Run(context.Background(), "cat "+f.Path+".bak-alta", nil)
+	must(t, err)
+	if strings.TrimSpace(string(backup)) != "original" {
+		t.Errorf("backup = %q", backup)
+	}
+	must(t, ext.DeleteFile(context.Background(), f))
 }

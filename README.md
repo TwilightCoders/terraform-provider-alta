@@ -35,8 +35,14 @@ resource "alta_router_config" "router" {
   # port_forwards, firewall_rules, vlans, static_routes, switch_ports, dhcp_reservations
 }
 
-# For the few behaviours the cloud has no concept of: a script the router runs for
-# itself, reinstalled after every boot and push. Touches the router only, never the cloud.
+# For the few behaviours the cloud has no concept of. Both touch the router only,
+# never the cloud, so neither triggers a configuration push.
+resource "alta_device_file" "post_cfg" {
+  path    = "/cfg/post-cfg.sh"
+  content = file("post-cfg.sh")
+  mode    = "0755"
+}
+
 resource "alta_device_hook" "example" {
   name      = "example"
   interface = "wg0"

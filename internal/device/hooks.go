@@ -82,7 +82,8 @@ func (h Hook) validate() error {
 // HookState is what the router currently holds for a hook.
 type HookState struct {
 	Present bool
-	// Loader reports whether post-cfg.sh carries the managed block that reinstalls hooks.
+	// Loader reports whether post-cfg.sh sources the provider's hook loader, without which
+	// hooks do not survive a boot or configuration push.
 	Loader bool
 	// Installed reports whether a hotplug hook is in place for the current boot.
 	Installed bool
@@ -115,9 +116,14 @@ func (e *Extensions) Put(ctx context.Context, h Hook) (HookState, error) {
 	if err != nil {
 		return HookState{}, fmt.Errorf("installing hook %q: %w", h.Name, err)
 	}
-	state := HookState{Present: true, Loader: true, Installed: h.Interface != "", Script: h.body()}
-	state.SHA256 = parseKeyValues(out)["sha256"]
-	return state, nil
+	fields := parseKeyValues(out)
+	return HookState{
+		Present:   true,
+		Loader:    fields["loader"] == "1",
+		Installed: h.Interface != "",
+		SHA256:    fields["sha256"],
+		Script:    h.body(),
+	}, nil
 }
 
 // Get reads what the router holds for the hook.
@@ -149,32 +155,13 @@ func (e *Extensions) Delete(ctx context.Context, h Hook, destroy string) error {
 	return nil
 }
 
-// loaderMarker identifies the managed block in post-cfg.sh.
-const loaderMarker = "alta provider hooks (managed)"
-
 type hookData struct {
 	Layout
 	Hook         Hook
-	LoaderMarker string
-	LoaderBlock  string
+	LoaderScript string
+	SourceLine   string
 }
 
 func (e *Extensions) data(h Hook) hookData {
-	return hookData{Layout: e.layout, Hook: h, LoaderMarker: loaderMarker, LoaderBlock: e.loaderBlock()}
-}
-
-// loaderBlock reinstalls hotplug hooks and runs boot hooks after every boot and push.
-func (e *Extensions) loaderBlock() string {
-	return fmt.Sprintf(`
-# >>> %s >>>
-for f in %s/hotplug/*; do
-  [ -r "$f" ] || continue
-  { cp "$f" %s/ && chmod 755 %s/"$(basename "$f")"; } 2>&1 | logger -t alta-hooks
-done
-for f in %s/boot/*.sh; do
-  [ -r "$f" ] || continue
-  sh "$f" 2>&1 | logger -t alta-hooks
-done
-# <<< %s <<<
-`, loaderMarker, e.layout.HookDir, e.layout.HotplugDir, e.layout.HotplugDir, e.layout.HookDir, loaderMarker)
+	return hookData{Layout: e.layout, Hook: h, LoaderScript: e.loaderScript(), SourceLine: e.layout.SourceLine()}
 }
