@@ -143,6 +143,11 @@ make install      # install into the local Terraform plugin mirror
 make dev-override # print a ~/.terraformrc dev_overrides block
 ```
 
+## Releasing
+
+Releases are built and signed by CI on a `v*` tag; the signing key belongs to the
+organisation and covers every provider it publishes. See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## License
 
 [MIT](LICENSE)
