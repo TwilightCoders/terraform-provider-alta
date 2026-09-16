@@ -16,5 +16,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # The test framework otherwise fetches a Terraform CLI itself, which depends on a
+      # download server's content type and fails for reasons that have nothing to do with
+      # this provider.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
       - run: make test
       - run: make lint
