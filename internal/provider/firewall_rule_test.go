@@ -225,7 +225,7 @@ resource "alta_firewall_rule" "vpn" {
 `, firewallRuleID)
 
 	resource.UnitTest(t, resource.TestCase{
-		ProtoV6ProviderFactories: h.defaultingFactories(),
+		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{
 			{
 				Config: config,

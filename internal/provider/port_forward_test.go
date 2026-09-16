@@ -5,48 +5,12 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
-	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 )
-
-// defaultingFactories is the harness provider carrying the identities its own block names,
-// which is what the real provider does with them. The shared factories() drops them, so a
-// resource under it has nothing to fall back on.
-func (h *harness) defaultingFactories() map[string]func() (tfprotov6.ProviderServer, error) {
-	return map[string]func() (tfprotov6.ProviderServer, error){
-		"alta": providerserver.NewProtocol6WithError(&Provider{version: "test", build: func(s Settings) (*resources.ProviderData, error) {
-			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID}
-			if s.SSH != nil {
-				data.Transactions = h.tx
-				data.Hooks = h.hooks
-			}
-			return data, nil
-		}}),
-	}
-}
-
-// providerBlockWithSite names the site once, on the provider, so the resources under it
-// need not name it at all.
-func providerBlockWithSite(readOnly bool) string {
-	return fmt.Sprintf(`
-provider "alta" {
-  email     = "test"
-  password  = "test"
-  read_only = %t
-  site_id   = %q
-  ssh = {
-    host                 = "192.0.2.1"
-    host_key_fingerprint = "SHA256:test"
-  }
-}
-`, readOnly, cloudtest.SiteID)
-}
 
 // forwards is the collection alta_port_forward writes into.
 func (h *harness) forwards() ([]routerconfig.PortForward, error) {
@@ -191,7 +155,7 @@ resource "alta_port_forward" "sip" {
 `, portForwardID)
 
 	resource.UnitTest(t, resource.TestCase{
-		ProtoV6ProviderFactories: h.defaultingFactories(),
+		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{
 			{
 				Config: config,

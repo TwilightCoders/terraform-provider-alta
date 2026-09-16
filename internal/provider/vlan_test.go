@@ -8,14 +8,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
-	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 )
 
@@ -68,21 +65,6 @@ resource "alta_vlan" "lab" {
   dns_servers  = ["192.0.2.10"]
 }
 `
-}
-
-// vlanScopedFactories carries the provider's own identities into ProviderData, which the
-// shared harness leaves out.
-func (h *harness) vlanScopedFactories() map[string]func() (tfprotov6.ProviderServer, error) {
-	return map[string]func() (tfprotov6.ProviderServer, error){
-		"alta": providerserver.NewProtocol6WithError(&Provider{version: "test", build: func(s Settings) (*resources.ProviderData, error) {
-			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID}
-			if s.SSH != nil {
-				data.Transactions = h.tx
-				data.Hooks = h.hooks
-			}
-			return data, nil
-		}}),
-	}
 }
 
 // TestVLANLifecycle covers the loop the whole provider is judged on: create, refresh
@@ -154,7 +136,7 @@ func TestVLANDefaultsToTheProvidersSite(t *testing.T) {
 	const name = "alta_vlan.lab"
 
 	resource.UnitTest(t, resource.TestCase{
-		ProtoV6ProviderFactories: h.vlanScopedFactories(),
+		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{
 			{
 				Config: vlanDefaultedConfig(),

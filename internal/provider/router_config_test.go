@@ -54,7 +54,11 @@ func newHarness(t *testing.T) *harness {
 func (h *harness) factories() map[string]func() (tfprotov6.ProviderServer, error) {
 	return map[string]func() (tfprotov6.ProviderServer, error){
 		"alta": providerserver.NewProtocol6WithError(&Provider{version: "test", build: func(s Settings) (*resources.ProviderData, error) {
-			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly}
+			// Carry the identities the provider block names, exactly as Build does; a
+			// harness that drops them lets a resource pass its tests and fail in anger.
+			data := &resources.ProviderData{
+				Cloud: h.api.Client(), ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID,
+			}
 			if s.SSH != nil {
 				data.Transactions = h.tx
 				data.Hooks = h.hooks
@@ -112,6 +116,24 @@ func sameIDs(read func() ([]string, error), want []string) error {
 		}
 	}
 	return nil
+}
+
+// providerBlockWithSite names both identities on the provider, so the resources under it
+// need name neither.
+func providerBlockWithSite(readOnly bool) string {
+	return fmt.Sprintf(`
+provider "alta" {
+  email     = "test"
+  password  = "test"
+  read_only = %t
+  site_id   = %q
+  device_id = %q
+  ssh = {
+    host                 = "192.0.2.1"
+    host_key_fingerprint = "SHA256:test"
+  }
+}
+`, readOnly, cloudtest.SiteID, cloudtest.DeviceID)
 }
 
 func providerBlock(readOnly bool) string {

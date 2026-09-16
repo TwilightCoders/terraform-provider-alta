@@ -7,14 +7,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/cloud/cloudtest"
-	"github.com/TwilightCoders/terraform-provider-alta/internal/resources"
 	"github.com/TwilightCoders/terraform-provider-alta/internal/routerconfig"
 )
 
@@ -68,21 +65,6 @@ resource "alta_switch_port" "uplink" {
   tagged_vlans = [20]
 }
 `
-}
-
-// switchPortScopedFactories carries the provider's own identities into ProviderData, which
-// the shared harness leaves out.
-func (h *harness) switchPortScopedFactories() map[string]func() (tfprotov6.ProviderServer, error) {
-	return map[string]func() (tfprotov6.ProviderServer, error){
-		"alta": providerserver.NewProtocol6WithError(&Provider{version: "test", build: func(s Settings) (*resources.ProviderData, error) {
-			data := &resources.ProviderData{Cloud: h.api.Client(), ReadOnly: s.ReadOnly, SiteID: s.SiteID, DeviceID: s.DeviceID}
-			if s.SSH != nil {
-				data.Transactions = h.tx
-				data.Hooks = h.hooks
-			}
-			return data, nil
-		}}),
-	}
 }
 
 // TestSwitchPortLifecycle covers create, refresh clean, change, import and destroy. The
@@ -156,7 +138,7 @@ func TestSwitchPortDefaultsToTheProvidersDevice(t *testing.T) {
 	h := newHarness(t)
 
 	resource.UnitTest(t, resource.TestCase{
-		ProtoV6ProviderFactories: h.switchPortScopedFactories(),
+		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{
 			{
 				Config: switchPortDefaultedConfig(cloudtest.DeviceID),
@@ -185,7 +167,7 @@ func TestSwitchPortDefaultsToTheProvidersDevice(t *testing.T) {
 func TestSwitchPortWithoutADeviceSaysSo(t *testing.T) {
 	h := newHarness(t)
 	resource.UnitTest(t, resource.TestCase{
-		ProtoV6ProviderFactories: h.switchPortScopedFactories(),
+		ProtoV6ProviderFactories: h.factories(),
 		Steps: []resource.TestStep{{
 			Config:      switchPortDefaultedConfig(""),
 			ExpectError: regexp.MustCompile(`No device for this switch port`),
