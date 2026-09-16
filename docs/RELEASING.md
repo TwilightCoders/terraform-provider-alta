@@ -39,6 +39,28 @@ Then:
 Rotating the key later means registering the new public key and keeping the old one until
 no published version is still verified against it.
 
+## Verifying a release
+
+Releases are signed by the organisation's key:
+
+```
+Twilight Coders, LLC (Terraform Provider GPG Key) <terraform@twilightcoders.net>
+RSA 4096 — 1414 E2D6 01C8 A684 CBFF  79F8 6C57 E1DB 7F2A F1CC
+```
+
+Terraform checks the signature itself when installing from the registry. To check a
+GitHub release by hand:
+
+```bash
+gpg --recv-keys 1414E2D601C8A684CBFF79F86C57E1DB7F2AF1CC   # or import the key from the registry
+gpg --verify terraform-provider-alta_<version>_SHA256SUMS.sig \
+             terraform-provider-alta_<version>_SHA256SUMS
+```
+
+The key does not expire, so the revocation certificate written when it was generated is
+the only way to invalidate it. It belongs in 1Password beside the key itself, not only in
+`~/.gnupg/openpgp-revocs.d/`.
+
 ## Cutting a release
 
 ```bash
